@@ -6,5 +6,5 @@
 | Task 4: AI Voice Engine (Gemini Live & Structured Extractor) | Done | Web Speech hook, dynamic volume analysis, Gemini 3.5 Flash-Lite & regex fallback verified 4/4 |
 | Task 5: Multimodal Invoice / Receipt OCR Scanner | Done | Gemini 3.5 Flash-Lite multimodal extraction, scanning laser UI, itemized breakdown |
 | Task 6: Financial Dashboard, Dynamic Charts & Budget Tracking | Done | Live balance calculations, SVG curved area trendline, donut chart, budget alerts, and modal workflows |
-| Task 7: REST API & MCP Server for Google Spark | In Progress | REST endpoints & MCP server for tools execution |
-| Task 8: End-to-End Browser Testing, GitHub & Vercel Readiness | Pending | Verification with browser, documentation, git tags |
+| Task 7: REST API & MCP Server for Google Spark | Done | REST routes (/transactions, /summary, /budgets, /ocr, /voice) and MCP Server with 5 tools verified |
+| Task 8: End-to-End Browser Testing, GitHub & Vercel Readiness | In Progress | Verification with browser, documentation, git tags |
