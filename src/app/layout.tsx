@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AppProvider } from "@/lib/context/AppContext";
 
 export const metadata: Metadata = {
-  title: "TAFINANCE — Inteligencia Financiera Personal",
-  description: "Tu asistente personal de contabilidad, presupuestos y control financiero impulsado por Gemini AI en tiempo real.",
+  title: "TAFINANCE — Inteligencia Financiera Personal & Bóveda Privada",
+  description: "Tu asistente personal de contabilidad, presupuestos y control financiero con Gemini 3.8 Flash, escaneo OCR de facturas, bolsillos inteligentes y protocolo MCP.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -37,7 +38,9 @@ export default function RootLayout({
         <meta name="apple-touch-fullscreen" content="yes" />
       </head>
       <body className="min-h-screen bg-[#070A11] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-300">
-        {children}
+        <AppProvider>
+          {children}
+        </AppProvider>
       </body>
     </html>
   );

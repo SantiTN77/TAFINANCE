@@ -17,10 +17,32 @@ export interface Category {
   type: "EXPENSE" | "INCOME";
 }
 
+export interface Pocket {
+  id: string;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  icon: string;
+  color: string;
+  category: string;
+  auto_save_percentage?: number;
+  created_at?: string;
+}
+
+export interface FixedCommitment {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string;
+  category: string;
+  isPaid?: boolean;
+}
+
 export interface Transaction {
   id: string;
   account_id?: string;
   category_id?: string;
+  pocket_id?: string;
   type: TransactionType;
   amount: number;
   currency: string;
@@ -37,6 +59,16 @@ export interface Budget {
   category_id: string;
   monthly_limit: number;
   month: string; // YYYY-MM
+}
+
+export interface UserSettings {
+  id: string;
+  theme: "dark" | "light";
+  language: "es" | "en";
+  currency: "COP" | "USD" | "EUR";
+  pure_black_oled: boolean;
+  auto_pilot: boolean;
+  updated_at?: string;
 }
 
 export interface FinancialSummary {

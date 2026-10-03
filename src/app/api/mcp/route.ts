@@ -6,7 +6,7 @@ import { parseVoiceFinancialInput } from "@/lib/ai/gemini-client";
 const MCP_TOOLS = [
   {
     name: "tafinance_get_balance",
-    description: "Obtiene el balance total neto, cuentas y resumen mensual de TAFINANCE.",
+    description: "Obtiene el balance total neto, cuentas bancarias, ahorros y resumen mensual de TAFINANCE.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -24,7 +24,7 @@ const MCP_TOOLS = [
         },
         type: {
           type: "string",
-          enum: ["EXPENSE", "INCOME"],
+          enum: ["EXPENSE", "INCOME", "TRANSFER"],
           description: "Filtrar por tipo de transacción",
         },
       },
@@ -32,14 +32,14 @@ const MCP_TOOLS = [
   },
   {
     name: "tafinance_create_transaction",
-    description: "Crea una nueva transacción (gasto o ingreso) en TAFINANCE.",
+    description: "Crea una nueva transacción (gasto, ingreso o transferencia) en TAFINANCE.",
     inputSchema: {
       type: "object",
       required: ["type", "amount", "description"],
       properties: {
         type: {
           type: "string",
-          enum: ["EXPENSE", "INCOME"],
+          enum: ["EXPENSE", "INCOME", "TRANSFER"],
           description: "Tipo de transacción",
         },
         amount: {
@@ -66,6 +66,58 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: "tafinance_list_pockets",
+    description: "Lista todos los bolsillos y metas de ahorro del usuario con montos acumulados y objetivos.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "tafinance_create_pocket",
+    description: "Crea un nuevo bolsillo o meta de ahorro (ej. Fondo de Emergencia, Vacaciones, Tecnología).",
+    inputSchema: {
+      type: "object",
+      required: ["name", "target_amount"],
+      properties: {
+        name: {
+          type: "string",
+          description: "Nombre del bolsillo o meta",
+        },
+        target_amount: {
+          type: "number",
+          description: "Meta objetivo a ahorrar",
+        },
+        category: {
+          type: "string",
+          description: "Categoría general (Ahorro, Inversión, Metas, Emergencia)",
+        },
+        color: {
+          type: "string",
+          description: "Color hexadecimal (opcional, ej. #4cd7f6)",
+        },
+      },
+    },
+  },
+  {
+    name: "tafinance_transfer_to_pocket",
+    description: "Transfiere fondos desde una cuenta hacia un bolsillo de ahorro específico.",
+    inputSchema: {
+      type: "object",
+      required: ["pocket_id", "amount"],
+      properties: {
+        pocket_id: {
+          type: "string",
+          description: "ID del bolsillo destino",
+        },
+        amount: {
+          type: "number",
+          description: "Monto a depositar",
+        },
+      },
+    },
+  },
+  {
     name: "tafinance_get_budget_status",
     description: "Consulta el estado y consumo de los presupuestos del mes actual.",
     inputSchema: {
@@ -80,7 +132,7 @@ const MCP_TOOLS = [
   },
   {
     name: "tafinance_process_natural_command",
-    description: "Procesa y registra un comando en lenguaje natural (ej. 'Gasté 45 mil en comida amigos' o 'Recibí pago de nómina').",
+    description: "Procesa y registra un comando en lenguaje natural (ej. 'Gasté 45 mil en comida amigos' o 'Ahorré 100 mil en Viajes').",
     inputSchema: {
       type: "object",
       required: ["command"],
@@ -100,6 +152,7 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
     case "tafinance_get_balance": {
       const summary = await financeStore.getSummary();
       const accounts = await financeStore.getAccounts();
+      const pockets = await financeStore.getPockets();
       return {
         content: [
           {
@@ -111,7 +164,9 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
                 monthlyIncome: summary.monthlyIncome,
                 monthlyExpenses: summary.monthlyExpenses,
                 savingsRate: `${summary.savingsRate.toFixed(1)}%`,
-                accounts: accounts.map((a) => ({ name: a.name, balance: a.balance })),
+                accounts: accounts.map((a) => ({ id: a.id, name: a.name, balance: a.balance })),
+                pocketsCount: pockets.length,
+                totalSavedInPockets: pockets.reduce((acc, p) => acc + Number(p.current_amount), 0),
               },
               null,
               2
@@ -139,7 +194,7 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
     }
 
     case "tafinance_create_transaction": {
-      const type = (args?.type as "EXPENSE" | "INCOME") || "EXPENSE";
+      const type = (args?.type as "EXPENSE" | "INCOME" | "TRANSFER") || "EXPENSE";
       const amount = Number(args?.amount);
       const description = String(args?.description || "");
       const merchant = args?.merchant as string | undefined;
@@ -169,7 +224,72 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
           {
             type: "text",
             text: JSON.stringify(
-              { message: "Transacción creada exitosamente en TAFINANCE", transaction: created },
+              { message: "Transacción registrada exitosamente en TAFINANCE", transaction: created },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
+    case "tafinance_list_pockets": {
+      const pockets = await financeStore.getPockets();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(pockets, null, 2),
+          },
+        ],
+      };
+    }
+
+    case "tafinance_create_pocket": {
+      const name = String(args?.name || "");
+      const target_amount = Number(args?.target_amount || 0);
+      const category = String(args?.category || "Ahorro");
+      const color = String(args?.color || "#4cd7f6");
+
+      const pocket = await financeStore.addPocket({
+        name,
+        target_amount,
+        current_amount: 0,
+        category,
+        color,
+        icon: "Wallet",
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { message: "Bolsillo de ahorro creado con éxito", pocket },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
+    case "tafinance_transfer_to_pocket": {
+      const pocketId = String(args?.pocket_id || "");
+      const amount = Number(args?.amount || 0);
+
+      const success = await financeStore.transferToPocket(pocketId, amount);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success,
+                message: success
+                  ? `Se transfirieron $${amount} al bolsillo exitosamente`
+                  : "No se pudo realizar la transferencia. Verifica el ID del bolsillo.",
+              },
               null,
               2
             ),
@@ -296,7 +416,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(
     {
       name: "tafinance-mcp",
-      version: "1.0.0",
+      version: "2.0.0",
       protocolVersion: "2024-11-05",
       status: "active",
       sseEndpoint: `${baseUrl}/api/mcp?sse=true`,
@@ -329,7 +449,7 @@ export async function POST(req: NextRequest) {
             },
             serverInfo: {
               name: "tafinance",
-              version: "1.0.0",
+              version: "2.0.0",
             },
           },
         },
@@ -392,7 +512,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Default response for unhandled method
     return NextResponse.json(
       {
         jsonrpc: "2.0",
@@ -404,7 +523,7 @@ export async function POST(req: NextRequest) {
       },
       { status: 404, headers: CORS_HEADERS }
     );
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       {
         jsonrpc: "2.0",

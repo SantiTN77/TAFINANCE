@@ -1,76 +1,31 @@
-import { Account, Budget, Category, FinancialSummary, Transaction } from "@/types/finance";
+import { Account, Budget, Category, FinancialSummary, Pocket, Transaction } from "@/types/finance";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
-// Initial seed data for offline / local-first experience
-const INITIAL_CATEGORIES: Category[] = [
-  { id: "cat-1", name: "Alimentación & Restaurantes", icon: "Utensils", color: "#10B981", type: "EXPENSE" },
-  { id: "cat-2", name: "Transporte & Gasolina", icon: "Car", color: "#06B6D4", type: "EXPENSE" },
-  { id: "cat-3", name: "Suscripciones & Ocio", icon: "Sparkles", color: "#8B5CF6", type: "EXPENSE" },
-  { id: "cat-4", name: "Servicios Públicos & Hogar", icon: "Zap", color: "#F59E0B", type: "EXPENSE" },
-  { id: "cat-5", name: "Compras & Ropa", icon: "ShoppingBag", color: "#EC4899", type: "EXPENSE" },
-  { id: "cat-6", name: "Salud & Cuidado", icon: "HeartPulse", color: "#EF4444", type: "EXPENSE" },
-  { id: "cat-7", name: "Salario & Nómina", icon: "Briefcase", color: "#10B981", type: "INCOME" },
-  { id: "cat-8", name: "Ingresos Extra & Freelance", icon: "TrendingUp", color: "#06B6D4", type: "INCOME" },
+// Clean zero-mock base categories
+const DEFAULT_CATEGORIES: Category[] = [
+  { id: "cat-food", name: "Alimentación & Supermercado", icon: "ShoppingCart", color: "#8083ff", type: "EXPENSE" },
+  { id: "cat-transport", name: "Transporte & Movilidad", icon: "Car", color: "#4cd7f6", type: "EXPENSE" },
+  { id: "cat-home", name: "Vivienda & Servicios", icon: "Home", color: "#f59e0b", type: "EXPENSE" },
+  { id: "cat-subscriptions", name: "Suscripciones & Digital", icon: "Laptop", color: "#8b5cf6", type: "EXPENSE" },
+  { id: "cat-leisure", name: "Ocio & Restaurantes", icon: "Coffee", color: "#ec4899", type: "EXPENSE" },
+  { id: "cat-health", name: "Salud & Bienestar", icon: "HeartPulse", color: "#ef4444", type: "EXPENSE" },
+  { id: "cat-salary", name: "Salario & Nómina", icon: "Briefcase", color: "#4edea3", type: "INCOME" },
+  { id: "cat-freelance", name: "Ingresos Extra & Freelance", icon: "TrendingUp", color: "#06b6d4", type: "INCOME" },
 ];
 
-const INITIAL_ACCOUNTS: Account[] = [
-  { id: "acc-1", name: "Cuenta Principal", type: "bank", balance: 2450000, currency: "COP" },
-  { id: "acc-2", name: "Billetera Efectivo", type: "cash", balance: 120000, currency: "COP" },
-  { id: "acc-3", name: "Fondo de Ahorros", type: "savings", balance: 1500000, currency: "COP" },
-];
-
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  {
-    id: "tx-1",
-    account_id: "acc-1",
-    category_id: "cat-7",
-    type: "INCOME",
-    amount: 3200000,
-    currency: "COP",
-    description: "Pago de nómina quincenal",
-    merchant: "Empresa",
-    date: "2026-10-01",
-    created_at: new Date("2026-10-01T08:00:00Z").toISOString(),
-  },
-  {
-    id: "tx-2",
-    account_id: "acc-1",
-    category_id: "cat-3",
-    type: "EXPENSE",
-    amount: 30000,
-    currency: "COP",
-    description: "Spotify Premium Mensual",
-    merchant: "Spotify",
-    date: "2026-10-02",
-    created_at: new Date("2026-10-02T12:00:00Z").toISOString(),
-  },
-  {
-    id: "tx-3",
-    account_id: "acc-2",
-    category_id: "cat-1",
-    type: "EXPENSE",
-    amount: 45000,
-    currency: "COP",
-    description: "Comida con amigos",
-    merchant: "Restaurante Bistro",
-    raw_prompt: "Gasté 45 mil en comida amigos",
-    date: "2026-10-02",
-    created_at: new Date("2026-10-02T19:30:00Z").toISOString(),
-  },
-];
-
-const INITIAL_BUDGETS: Budget[] = [
-  { id: "b-1", category_id: "cat-1", monthly_limit: 600000, month: "2026-10" },
-  { id: "b-2", category_id: "cat-2", monthly_limit: 250000, month: "2026-10" },
-  { id: "b-3", category_id: "cat-3", monthly_limit: 150000, month: "2026-10" },
-  { id: "b-4", category_id: "cat-4", monthly_limit: 300000, month: "2026-10" },
+// Clean zero-balance accounts
+const DEFAULT_ACCOUNTS: Account[] = [
+  { id: "acc-main", name: "Cuenta Principal", type: "bank", balance: 0, currency: "COP" },
+  { id: "acc-cash", name: "Billetera Efectivo", type: "cash", balance: 0, currency: "COP" },
+  { id: "acc-savings", name: "Fondo de Ahorros", type: "savings", balance: 0, currency: "COP" },
 ];
 
 class FinanceStore {
-  private categories: Category[] = [...INITIAL_CATEGORIES];
-  private accounts: Account[] = [...INITIAL_ACCOUNTS];
-  private transactions: Transaction[] = [...INITIAL_TRANSACTIONS];
-  private budgets: Budget[] = [...INITIAL_BUDGETS];
+  private categories: Category[] = [...DEFAULT_CATEGORIES];
+  private accounts: Account[] = [...DEFAULT_ACCOUNTS];
+  private transactions: Transaction[] = []; // ZERO MOCK DATA
+  private pockets: Pocket[] = []; // ZERO MOCK DATA
+  private budgets: Budget[] = []; // ZERO MOCK DATA
   private isBrowser: boolean = typeof window !== "undefined";
 
   constructor() {
@@ -90,10 +45,13 @@ class FinanceStore {
       const storedTransactions = localStorage.getItem("tafinance_transactions");
       if (storedTransactions) this.transactions = JSON.parse(storedTransactions);
 
+      const storedPockets = localStorage.getItem("tafinance_pockets");
+      if (storedPockets) this.pockets = JSON.parse(storedPockets);
+
       const storedBudgets = localStorage.getItem("tafinance_budgets");
       if (storedBudgets) this.budgets = JSON.parse(storedBudgets);
     } catch {
-      // Fallback silently to initial in-memory
+      // Fallback silently
     }
   }
 
@@ -103,36 +61,172 @@ class FinanceStore {
       localStorage.setItem("tafinance_categories", JSON.stringify(this.categories));
       localStorage.setItem("tafinance_accounts", JSON.stringify(this.accounts));
       localStorage.setItem("tafinance_transactions", JSON.stringify(this.transactions));
+      localStorage.setItem("tafinance_pockets", JSON.stringify(this.pockets));
       localStorage.setItem("tafinance_budgets", JSON.stringify(this.budgets));
     } catch {
       // ignore storage quota errors
     }
   }
 
+  // --- ACCOUNTS ---
   async getAccounts(): Promise<Account[]> {
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from("accounts").select("*");
-        if (!error && data && data.length > 0) return data;
-      } catch {
-        // Fallback
-      }
+        if (!error && data && data.length > 0) {
+          this.accounts = data;
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch {}
     }
     return this.accounts;
   }
 
+  async updateAccountBalance(accountId: string, newBalance: number): Promise<boolean> {
+    const acc = this.accounts.find((a) => a.id === accountId);
+    if (!acc) return false;
+
+    acc.balance = newBalance;
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("accounts").update({ balance: newBalance }).eq("id", accountId);
+      } catch {}
+    }
+    this.saveToLocalStorage();
+    return true;
+  }
+
+  // --- CATEGORIES ---
   async getCategories(): Promise<Category[]> {
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from("categories").select("*");
-        if (!error && data && data.length > 0) return data;
-      } catch {
-        // Fallback
-      }
+        if (!error && data && data.length > 0) {
+          this.categories = data;
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch {}
     }
     return this.categories;
   }
 
+  // --- POCKETS (BOLSILLOS) ---
+  async getPockets(): Promise<Pocket[]> {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase.from("pockets").select("*");
+        if (!error && data) {
+          this.pockets = data;
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch {}
+    }
+    return this.pockets;
+  }
+
+  async addPocket(pocket: Omit<Pocket, "id" | "created_at">): Promise<Pocket> {
+    const newPocket: Pocket = {
+      ...pocket,
+      id: "pkt-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+      created_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("pockets")
+          .insert([newPocket])
+          .select()
+          .single();
+        if (!error && data) {
+          this.pockets.push(data);
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch {}
+    }
+
+    this.pockets.push(newPocket);
+    this.saveToLocalStorage();
+    return newPocket;
+  }
+
+  async createPocket(pocket: Omit<Pocket, "id" | "created_at">): Promise<Pocket> {
+    return this.addPocket(pocket);
+  }
+
+  async updatePocket(id: string, updates: Partial<Pocket>): Promise<Pocket | null> {
+    const index = this.pockets.findIndex((p) => p.id === id);
+    if (index === -1) return null;
+
+    this.pockets[index] = { ...this.pockets[index], ...updates };
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("pockets").update(updates).eq("id", id);
+      } catch {}
+    }
+
+    this.saveToLocalStorage();
+    return this.pockets[index];
+  }
+
+  async deletePocket(id: string): Promise<boolean> {
+    const index = this.pockets.findIndex((p) => p.id === id);
+    if (index === -1) return false;
+
+    this.pockets.splice(index, 1);
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("pockets").delete().eq("id", id);
+      } catch {}
+    }
+
+    this.saveToLocalStorage();
+    return true;
+  }
+
+  async transferToPocket(pocketId: string, amount: number, accountId?: string): Promise<boolean> {
+    const pocket = this.pockets.find((p) => p.id === pocketId);
+    if (!pocket) return false;
+
+    // Deduct from account if specified
+    const account = accountId ? this.accounts.find((a) => a.id === accountId) : this.accounts[0];
+    if (account) {
+      account.balance -= amount;
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          await supabase.from("accounts").update({ balance: account.balance }).eq("id", account.id);
+        } catch {}
+      }
+    }
+
+    pocket.current_amount += amount;
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("pockets").update({ current_amount: pocket.current_amount }).eq("id", pocketId);
+      } catch {}
+    }
+
+    // Record internal transfer transaction
+    await this.addTransaction({
+      type: "TRANSFER",
+      amount,
+      currency: "COP",
+      description: `Aporte a bolsillo: ${pocket.name}`,
+      pocket_id: pocketId,
+      account_id: account?.id,
+      date: new Date().toISOString().split("T")[0],
+    });
+
+    this.saveToLocalStorage();
+    return true;
+  }
+
+  // --- TRANSACTIONS ---
   async getTransactions(): Promise<Transaction[]> {
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -140,10 +234,12 @@ class FinanceStore {
           .from("transactions")
           .select("*")
           .order("date", { ascending: false });
-        if (!error && data) return data;
-      } catch {
-        // Fallback
-      }
+        if (!error && data) {
+          this.transactions = data;
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch {}
     }
     return [...this.transactions].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -166,10 +262,12 @@ class FinanceStore {
           .insert([newTx])
           .select()
           .single();
-        if (!error && data) return data;
-      } catch {
-        // Fallback
-      }
+        if (!error && data) {
+          this.transactions.unshift(data);
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch {}
     }
 
     // Update in-memory / local storage
@@ -179,9 +277,14 @@ class FinanceStore {
     const account = this.accounts.find((a) => a.id === tx.account_id) || this.accounts[0];
     if (account) {
       if (tx.type === "INCOME") {
-        account.balance += tx.amount;
+        account.balance += Number(tx.amount);
       } else if (tx.type === "EXPENSE") {
-        account.balance -= tx.amount;
+        account.balance -= Number(tx.amount);
+      }
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          await supabase.from("accounts").update({ balance: account.balance }).eq("id", account.id);
+        } catch {}
       }
     }
 
@@ -198,18 +301,21 @@ class FinanceStore {
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from("transactions").delete().eq("id", id);
-      } catch {
-        // Fallback
-      }
+      } catch {}
     }
 
     // Revert balance
     const account = this.accounts.find((a) => a.id === tx.account_id) || this.accounts[0];
     if (account) {
       if (tx.type === "INCOME") {
-        account.balance -= tx.amount;
+        account.balance -= Number(tx.amount);
       } else if (tx.type === "EXPENSE") {
-        account.balance += tx.amount;
+        account.balance += Number(tx.amount);
+      }
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          await supabase.from("accounts").update({ balance: account.balance }).eq("id", account.id);
+        } catch {}
       }
     }
 
@@ -218,14 +324,17 @@ class FinanceStore {
     return true;
   }
 
+  // --- BUDGETS ---
   async getBudgets(): Promise<Budget[]> {
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from("budgets").select("*");
-        if (!error && data) return data;
-      } catch {
-        // Fallback
-      }
+        if (!error && data) {
+          this.budgets = data;
+          this.saveToLocalStorage();
+          return data;
+        }
+      } catch {}
     }
     return this.budgets;
   }
@@ -252,16 +361,15 @@ class FinanceStore {
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from("budgets").upsert([budget]);
-      } catch {
-        // Fallback
-      }
+      } catch {}
     }
 
     this.saveToLocalStorage();
     return budget;
   }
 
-  async getSummary(targetMonth = "2026-10"): Promise<FinancialSummary> {
+  // --- SUMMARY CALCULATION ---
+  async getSummary(targetMonth = new Date().toISOString().slice(0, 7)): Promise<FinancialSummary> {
     const [accounts, categories, transactions, budgets] = await Promise.all([
       this.getAccounts(),
       this.getCategories(),
@@ -317,13 +425,10 @@ class FinanceStore {
       };
     });
 
-    // 7-day timeline net worth trend
+    // Net worth history (clean points from real transactions)
     const netWorthHistory = [
-      { date: "26 Sep", balance: totalBalance - monthlyIncome * 0.4 + monthlyExpenses * 0.3 },
-      { date: "28 Sep", balance: totalBalance - monthlyIncome * 0.2 + monthlyExpenses * 0.2 },
-      { date: "30 Sep", balance: totalBalance - monthlyIncome * 0.1 + monthlyExpenses * 0.1 },
-      { date: "01 Oct", balance: totalBalance - 45000 },
-      { date: "02 Oct", balance: totalBalance },
+      { date: "01", balance: totalBalance - monthlyIncome + monthlyExpenses },
+      { date: "Hoy", balance: totalBalance },
     ];
 
     return {
@@ -335,6 +440,50 @@ class FinanceStore {
       categoryBreakdown,
       budgetStatus,
     };
+  }
+
+  // --- DATA RESET & BACKUP ---
+  async clearAllData(): Promise<boolean> {
+    this.transactions = [];
+    this.pockets = [];
+    this.budgets = [];
+    this.accounts = this.accounts.map((a) => ({ ...a, balance: 0 }));
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await Promise.all([
+          supabase.from("transactions").delete().neq("id", "none"),
+          supabase.from("pockets").delete().neq("id", "none"),
+          supabase.from("budgets").delete().neq("id", "none"),
+          supabase.from("accounts").update({ balance: 0 }).neq("id", "none"),
+        ]);
+      } catch {}
+    }
+
+    if (this.isBrowser) {
+      localStorage.removeItem("tafinance_transactions");
+      localStorage.removeItem("tafinance_pockets");
+      localStorage.removeItem("tafinance_budgets");
+      localStorage.setItem("tafinance_accounts", JSON.stringify(this.accounts));
+    }
+
+    return true;
+  }
+
+  exportBackup(): any {
+    return {
+      version: "2.0.0",
+      exportedAt: new Date().toISOString(),
+      accounts: this.accounts,
+      categories: this.categories,
+      pockets: this.pockets,
+      budgets: this.budgets,
+      transactions: this.transactions,
+    };
+  }
+
+  exportBackupJson(): string {
+    return JSON.stringify(this.exportBackup(), null, 2);
   }
 }
 

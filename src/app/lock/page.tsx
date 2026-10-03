@@ -22,7 +22,7 @@ import {
 function LockContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = searchParams.get("redirect") || "/";
+  const redirectPath = searchParams.get("redirect") || "/app";
 
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);

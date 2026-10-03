@@ -3,6 +3,7 @@ import { verifySessionToken } from "./lib/auth/security";
 
 // Public static files and public routes allowed without authentication
 const PUBLIC_PATHS = [
+  "/",
   "/lock",
   "/manifest.json",
   "/manifest.webmanifest",
@@ -11,14 +12,16 @@ const PUBLIC_PATHS = [
   "/icon-512.svg",
   "/favicon.ico",
   "/api/auth/login",
+  "/api/auth/logout",
   "/api/auth/biometric",
+  "/api/auth/check",
   "/api/mcp",
 ];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. Allow MCP endpoints for Google Spark and remote agent integrations
+  // 1. Allow MCP endpoints for Google Spark and remote agent integrations (Public & CORS friendly)
   if (pathname.startsWith("/api/mcp")) {
     return NextResponse.next();
   }
@@ -62,31 +65,38 @@ export async function middleware(req: NextRequest) {
           pathname === p ||
           pathname.endsWith(".svg") ||
           pathname.endsWith(".png") ||
-          pathname.endsWith(".json")
+          pathname.endsWith(".ico") ||
+          pathname.endsWith(".json") ||
+          pathname.endsWith(".webmanifest")
       );
     if (isPublicStatic) {
       return NextResponse.next();
     }
   }
 
-  // 4. Allow explicit public endpoints
+  // 4. Allow public landing page directly
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+
+  // 5. Allow explicit public endpoints
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // 5. Check session cookie
+  // 6. Check session cookie for protected vault
   const token = req.cookies.get("tafinance_session")?.value;
   const isAuthenticated = await verifySessionToken(token);
 
   if (isAuthenticated) {
-    // If user is already authenticated and visits /lock, redirect to dashboard
+    // If authenticated user visits /lock, redirect directly to /app
     if (pathname === "/lock") {
-      return NextResponse.redirect(new URL("/", req.url));
+      return NextResponse.redirect(new URL("/app", req.url));
     }
     return NextResponse.next();
   }
 
-  // 6. Unauthorized handling
+  // 7. Unauthorized handling
   // For API endpoints, return 401 JSON
   if (pathname.startsWith("/api/")) {
     return NextResponse.json(
@@ -98,9 +108,9 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  // For pages, redirect to /lock
+  // For protected routes like /app, redirect to /lock
   const lockUrl = new URL("/lock", req.url);
-  if (pathname !== "/") {
+  if (pathname !== "/app") {
     lockUrl.searchParams.set("redirect", pathname);
   }
   return NextResponse.redirect(lockUrl);
