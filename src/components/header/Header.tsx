@@ -29,7 +29,7 @@ export function Header({ onOpenVoice }: HeaderProps) {
           </div>
         </div>
 
-        {/* AI & Live Indicator */}
+        {/* AI & Live Indicator + Lock button */}
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenVoice}
@@ -41,6 +41,17 @@ export function Header({ onOpenVoice }: HeaderProps) {
             </span>
             <Sparkles className="w-3 h-3 text-emerald-400" />
             <span className="font-medium">Gemini 3.8</span>
+          </button>
+
+          <button
+            onClick={async () => {
+              await fetch("/api/auth/logout", { method: "POST" });
+              window.location.href = "/lock";
+            }}
+            title="Bloquear bóveda"
+            className="p-1.5 rounded-full bg-slate-900/80 border border-white/[0.08] text-slate-400 hover:text-red-400 hover:border-red-500/30 transition-colors"
+          >
+            <ShieldCheck className="w-4 h-4" />
           </button>
         </div>
       </div>
