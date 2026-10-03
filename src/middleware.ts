@@ -3,7 +3,6 @@ import { verifySessionToken } from "./lib/auth/security";
 
 // Public static files and public routes allowed without authentication
 const PUBLIC_PATHS = [
-  "/",
   "/lock",
   "/manifest.json",
   "/manifest.webmanifest",
@@ -79,8 +78,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 5. Allow explicit public endpoints
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // 5. Allow explicit public endpoints (exact match or path starting with prefix + '/')
+  if (
+    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
+  ) {
     return NextResponse.next();
   }
 
