@@ -149,6 +149,7 @@ export default function AppPage() {
                   summary={summary}
                   onOpenVoice={() => setIsVoiceOpen(true)}
                   onOpenScan={() => setActiveTab("scan")}
+                  onOpenAdd={() => setIsAddOpen(true)}
                 />
 
                 {/* 30-Day Smart Cashflow Forecast */}
@@ -191,6 +192,7 @@ export default function AppPage() {
                 totalBalance={summary?.totalBalance ?? 0}
                 onTransferToPocket={handleTransferToPocket}
                 onShowToast={showToast}
+                onTransactionSaved={refreshData}
               />
             )}
 
@@ -236,6 +238,7 @@ export default function AppPage() {
         onClose={() => setIsAddOpen(false)}
         categories={categories}
         accounts={accounts}
+        pockets={pockets}
         onTransactionSaved={refreshData}
       />
     </div>

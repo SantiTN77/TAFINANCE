@@ -50,6 +50,8 @@ export interface Transaction {
   merchant?: string;
   receipt_url?: string;
   raw_prompt?: string;
+  is_recurring?: boolean;
+  recurrence_interval?: "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "YEARLY";
   date: string; // YYYY-MM-DD
   created_at: string;
 }

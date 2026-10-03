@@ -2,16 +2,26 @@
 
 import React from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { ArrowUpRight, ArrowDownRight, TrendingUp, Sparkles, Mic } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, TrendingUp, Sparkles, Mic, Plus } from "lucide-react";
 import { FinancialSummary } from "@/types/finance";
+import { useApp } from "@/lib/context/AppContext";
 
 interface BalanceOverviewProps {
   summary: FinancialSummary | null;
   onOpenVoice: () => void;
   onOpenScan: () => void;
+  onOpenAdd?: () => void;
 }
 
-export function BalanceOverview({ summary, onOpenVoice, onOpenScan }: BalanceOverviewProps) {
+export function BalanceOverview({
+  summary,
+  onOpenVoice,
+  onOpenScan,
+  onOpenAdd,
+}: BalanceOverviewProps) {
+  const { language, formatMoney } = useApp();
+  const isEs = language === "es";
+
   const totalBalance = summary?.totalBalance ?? 0;
   const monthlyIncome = summary?.monthlyIncome ?? 0;
   const monthlyExpenses = summary?.monthlyExpenses ?? 0;
@@ -27,11 +37,11 @@ export function BalanceOverview({ summary, onOpenVoice, onOpenScan }: BalanceOve
 
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
-            Balance Total Neto
+            {isEs ? "Balance Total Neto" : "Total Net Balance"}
           </span>
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <TrendingUp className="w-3 h-3" />
-            {savingsRate.toFixed(0)}% Ahorro
+            {savingsRate.toFixed(0)}% {isEs ? "Ahorro" : "Savings"}
           </span>
         </div>
 
@@ -42,21 +52,39 @@ export function BalanceOverview({ summary, onOpenVoice, onOpenScan }: BalanceOve
           <span className="text-xs font-semibold text-slate-400">COP</span>
         </div>
 
-        {/* Quick Action Pills */}
-        <div className="mt-5 grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.06]">
+        {/* Quick Action Pills: Manual, Voice, Scan */}
+        <div className="mt-5 grid grid-cols-3 gap-2 pt-2 border-t border-white/[0.06]">
+          {onOpenAdd && (
+            <button
+              onClick={onOpenAdd}
+              className="py-2.5 px-2 rounded-2xl bg-slate-900/80 hover:bg-slate-800 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all active:scale-98 shadow-sm"
+              title="Registrar gasto, ingreso o compromiso recurrente"
+            >
+              <Plus className="w-4 h-4 text-emerald-400" />
+              <span className="text-[10px] truncate max-w-full">
+                {isEs ? "+ Manual" : "+ Manual"}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={onOpenVoice}
-            className="py-2.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-98"
+            className="py-2.5 px-2 rounded-2xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex flex-col items-center justify-center gap-1 transition-all active:scale-98"
           >
             <Mic className="w-4 h-4 text-emerald-400" />
-            <span>Hablar al Orbe</span>
+            <span className="text-[10px] truncate max-w-full">
+              {isEs ? "Voz Live" : "Live Voice"}
+            </span>
           </button>
+
           <button
             onClick={onOpenScan}
-            className="py-2.5 px-3 rounded-2xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-98"
+            className="py-2.5 px-2 rounded-2xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/30 text-cyan-300 text-xs font-semibold flex flex-col items-center justify-center gap-1 transition-all active:scale-98"
           >
             <Sparkles className="w-4 h-4 text-cyan-400" />
-            <span>Escanear Recibo</span>
+            <span className="text-[10px] truncate max-w-full">
+              {isEs ? "Escanear" : "Scan OCR"}
+            </span>
           </button>
         </div>
       </GlassCard>
@@ -66,7 +94,9 @@ export function BalanceOverview({ summary, onOpenVoice, onOpenScan }: BalanceOve
         {/* Income Card */}
         <GlassCard className="p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-medium text-slate-400">Ingresos Mes</span>
+            <span className="text-[11px] font-medium text-slate-400">
+              {isEs ? "Ingresos Mes" : "Income Month"}
+            </span>
             <div className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center">
               <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
             </div>
@@ -75,14 +105,18 @@ export function BalanceOverview({ summary, onOpenVoice, onOpenScan }: BalanceOve
             <p className="text-base font-extrabold text-emerald-400 tracking-tight">
               +${monthlyIncome.toLocaleString("es-CO")}
             </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Octubre 2026</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {isEs ? "Mes en curso" : "Current month"}
+            </p>
           </div>
         </GlassCard>
 
         {/* Expenses Card */}
         <GlassCard className="p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-medium text-slate-400">Gastos Mes</span>
+            <span className="text-[11px] font-medium text-slate-400">
+              {isEs ? "Gastos Mes" : "Expenses Month"}
+            </span>
             <div className="w-6 h-6 rounded-full bg-rose-500/10 flex items-center justify-center">
               <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
             </div>
@@ -91,7 +125,9 @@ export function BalanceOverview({ summary, onOpenVoice, onOpenScan }: BalanceOve
             <p className="text-base font-extrabold text-rose-400 tracking-tight">
               -${monthlyExpenses.toLocaleString("es-CO")}
             </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Octubre 2026</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {isEs ? "Mes en curso" : "Current month"}
+            </p>
           </div>
         </GlassCard>
       </div>

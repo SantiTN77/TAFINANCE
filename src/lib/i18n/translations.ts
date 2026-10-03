@@ -20,6 +20,15 @@ export const translations = {
     empty: "Sin registros aún",
     all: "Todos",
 
+    // Navigation
+    nav: {
+      dashboard: "Inicio",
+      pockets: "Bolsillos",
+      copilot: "Copiloto",
+      scan: "Escanear",
+      settings: "Ajustes",
+    },
+
     // Landing Page
     landingHeroBadge: "Arquitectura Next.js 15 + Gemini 3.8 + WebAuthn",
     landingHeroTitle: "Tu Bóveda Financiera con Inteligencia Artificial",
@@ -169,6 +178,15 @@ export const translations = {
     dismiss: "Dismiss",
     empty: "No records yet",
     all: "All",
+
+    // Navigation
+    nav: {
+      dashboard: "Home",
+      pockets: "Pockets",
+      copilot: "Copilot",
+      scan: "Scan",
+      settings: "Settings",
+    },
 
     // Landing Page
     landingHeroBadge: "Next.js 15 + Gemini 3.8 + WebAuthn Architecture",

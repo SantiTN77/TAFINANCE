@@ -17,6 +17,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef<string>("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -78,14 +79,15 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
   const parseTranscript = useCallback(
     async (text: string) => {
-      if (!text.trim()) return;
+      const trimmed = text.trim();
+      if (!trimmed) return;
 
       setState("processing");
       try {
         const response = await fetch("/api/voice/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, apiKey: options.apiKey }),
+          body: JSON.stringify({ text: trimmed, apiKey: options.apiKey }),
         });
 
         if (!response.ok) {
@@ -100,7 +102,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         }
       } catch (err: any) {
         console.error("Error al parsear:", err);
-        setErrorMsg(err.message || "Error al clasificar");
+        setErrorMsg(err.message || "Error al clasificar comando");
         setState("error");
       }
     },
@@ -110,6 +112,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   const startListening = useCallback(async () => {
     setErrorMsg(null);
     setTranscript("");
+    transcriptRef.current = "";
     setParsedResult(null);
 
     const SpeechRecognition =
@@ -139,6 +142,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         for (let i = 0; i < event.results.length; i++) {
           currentText += event.results[i][0].transcript;
         }
+        transcriptRef.current = currentText;
         setTranscript(currentText);
       };
 
@@ -153,8 +157,9 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
       recognition.onend = () => {
         stopVolumeAnalysis();
-        if (transcript) {
-          parseTranscript(transcript);
+        const finalText = transcriptRef.current.trim();
+        if (finalText) {
+          parseTranscript(finalText);
         } else {
           setState("idle");
         }
@@ -167,24 +172,28 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       setState("error");
       stopVolumeAnalysis();
     }
-  }, [startVolumeAnalysis, stopVolumeAnalysis, transcript, parseTranscript]);
+  }, [startVolumeAnalysis, stopVolumeAnalysis, parseTranscript]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch {}
     }
     stopVolumeAnalysis();
-    if (transcript) {
-      parseTranscript(transcript);
+    const finalText = transcriptRef.current.trim();
+    if (finalText) {
+      parseTranscript(finalText);
     } else {
       setState("idle");
     }
-  }, [stopVolumeAnalysis, transcript, parseTranscript]);
+  }, [stopVolumeAnalysis, parseTranscript]);
 
   const reset = useCallback(() => {
     stopListening();
     setState("idle");
     setTranscript("");
+    transcriptRef.current = "";
     setParsedResult(null);
     setErrorMsg(null);
   }, [stopListening]);
@@ -193,7 +202,9 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     return () => {
       stopVolumeAnalysis();
       if (recognitionRef.current) {
-        recognitionRef.current.abort();
+        try {
+          recognitionRef.current.abort();
+        } catch {}
       }
     };
   }, [stopVolumeAnalysis]);
