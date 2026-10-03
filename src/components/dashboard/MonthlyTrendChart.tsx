@@ -63,14 +63,14 @@ export function MonthlyTrendChart({ history }: MonthlyTrendChartProps) {
         >
           <defs>
             <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#10B981" stop-opacity="0.35" />
-              <stop offset="70%" stop-color="#06B6D4" stop-opacity="0.1" />
-              <stop offset="100%" stop-color="#070A11" stop-opacity="0" />
+              <stop offset="0%" stopColor="#10B981" stopOpacity="0.35" />
+              <stop offset="70%" stopColor="#06B6D4" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#070A11" stopOpacity="0" />
             </linearGradient>
             <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#10B981" />
-              <stop offset="50%" stop-color="#06B6D4" />
-              <stop offset="100%" stop-color="#8B5CF6" />
+              <stop offset="0%" stopColor="#10B981" />
+              <stop offset="50%" stopColor="#06B6D4" />
+              <stop offset="100%" stopColor="#8B5CF6" />
             </linearGradient>
           </defs>
 
