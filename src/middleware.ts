@@ -12,12 +12,18 @@ const PUBLIC_PATHS = [
   "/favicon.ico",
   "/api/auth/login",
   "/api/auth/biometric",
+  "/api/mcp",
 ];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. IP Whitelisting Layer (Optional Vercel config: ALLOWED_IPS=181.53.99.92,...)
+  // 1. Allow MCP endpoints for Google Spark and remote agent integrations
+  if (pathname.startsWith("/api/mcp")) {
+    return NextResponse.next();
+  }
+
+  // 2. IP Whitelisting Layer (Optional Vercel config: ALLOWED_IPS=181.53.99.92,...)
   const allowedIpsEnv = process.env.ALLOWED_IPS;
   if (allowedIpsEnv && allowedIpsEnv.trim() !== "") {
     const allowedIps = allowedIpsEnv
@@ -43,7 +49,7 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // 2. Allow static Next.js assets & public icons
+  // 3. Allow static Next.js assets & public icons
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
@@ -63,12 +69,12 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // 3. Allow explicit public endpoints
+  // 4. Allow explicit public endpoints
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // 4. Check session cookie
+  // 5. Check session cookie
   const token = req.cookies.get("tafinance_session")?.value;
   const isAuthenticated = await verifySessionToken(token);
 
@@ -80,7 +86,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 5. Unauthorized handling
+  // 6. Unauthorized handling
   // For API endpoints, return 401 JSON
   if (pathname.startsWith("/api/")) {
     return NextResponse.json(
