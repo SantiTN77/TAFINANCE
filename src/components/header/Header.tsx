@@ -1,13 +1,42 @@
 "use client";
 
-import React from "react";
-import { Sparkles, ShieldCheck } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Sparkles, ShieldCheck, Fingerprint, Check } from "lucide-react";
+import {
+  isBiometricSupported,
+  hasRegisteredBiometrics,
+  registerBiometricCredential,
+} from "@/lib/auth/webauthn";
 
 interface HeaderProps {
   onOpenVoice?: () => void;
 }
 
 export function Header({ onOpenVoice }: HeaderProps) {
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [hasBiometric, setHasBiometric] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [registeredSuccess, setRegisteredSuccess] = useState(false);
+
+  useEffect(() => {
+    isBiometricSupported().then(setBiometricAvailable);
+    setHasBiometric(hasRegisteredBiometrics());
+  }, []);
+
+  const handleEnrollBiometrics = async () => {
+    setRegistering(true);
+    try {
+      const ok = await registerBiometricCredential();
+      if (ok) {
+        setHasBiometric(true);
+        setRegisteredSuccess(true);
+        setTimeout(() => setRegisteredSuccess(false), 3000);
+      }
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   return (
     <header className="sticky top-0 z-30 w-full backdrop-blur-xl bg-[#070A11]/75 border-b border-white/[0.06] px-4 py-3">
       <div className="max-w-md mx-auto flex items-center justify-between">
@@ -29,7 +58,7 @@ export function Header({ onOpenVoice }: HeaderProps) {
           </div>
         </div>
 
-        {/* AI & Live Indicator + Lock button */}
+        {/* AI & Live Indicator + Security Controls */}
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenVoice}
@@ -43,6 +72,33 @@ export function Header({ onOpenVoice }: HeaderProps) {
             <span className="font-medium">Gemini 3.8</span>
           </button>
 
+          {/* Biometric Passkey Enrollment Button */}
+          {biometricAvailable && (
+            <button
+              onClick={handleEnrollBiometrics}
+              disabled={registering}
+              title={
+                hasBiometric
+                  ? "Huella digital activa en este dispositivo"
+                  : "Vincular huella digital/FaceID a este dispositivo"
+              }
+              className={`p-1.5 rounded-full border transition-all ${
+                registeredSuccess
+                  ? "bg-emerald-500/20 border-emerald-400 text-emerald-300"
+                  : hasBiometric
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                  : "bg-slate-900/80 border-amber-500/40 text-amber-300 hover:bg-amber-500/10 animate-pulse"
+              }`}
+            >
+              {registeredSuccess ? (
+                <Check className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Fingerprint className="w-4 h-4" />
+              )}
+            </button>
+          )}
+
+          {/* Quick Lock Button */}
           <button
             onClick={async () => {
               await fetch("/api/auth/logout", { method: "POST" });
