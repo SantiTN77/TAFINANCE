@@ -1,22 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  X,
-  Check,
-  ArrowDownRight,
-  ArrowUpRight,
-  Repeat,
-  Wallet,
-  Calendar,
-  Building,
-  DollarSign,
-  Tag,
-} from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Check, ArrowDownRight, ArrowUpRight, Repeat, DollarSign, CreditCard } from "lucide-react";
 import { Category, Account, Pocket, TransactionType } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
 import { useApp } from "@/lib/context/AppContext";
+import { floatDaysFor, parseDate, todayStr } from "@/lib/finance/calc";
+import { Sheet, inputCls, labelCls } from "@/components/ui/Sheet";
+import { logger } from "@/lib/debug/logger";
 
 interface NewTransactionModalProps {
   isOpen: boolean;
@@ -27,6 +18,8 @@ interface NewTransactionModalProps {
   onTransactionSaved: () => void;
 }
 
+type Interval = "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "YEARLY";
+
 export function NewTransactionModal({
   isOpen,
   onClose,
@@ -35,26 +28,45 @@ export function NewTransactionModal({
   pockets = [],
   onTransactionSaved,
 }: NewTransactionModalProps) {
-  const { t, language } = useApp();
+  const { language, formatMoney } = useApp();
   const isEs = language === "es";
 
   const [type, setType] = useState<TransactionType>("EXPENSE");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [merchant, setMerchant] = useState("");
-  const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
-  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
-  const [pocketId, setPocketId] = useState<string>("");
+  const [categoryId, setCategoryId] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [pocketId, setPocketId] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceInterval, setRecurrenceInterval] = useState<
-    "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "YEARLY"
-  >("MONTHLY");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [recurrenceInterval, setRecurrenceInterval] = useState<Interval>("MONTHLY");
+  const [date, setDate] = useState(todayStr());
   const [isSaving, setIsSaving] = useState(false);
+
+  const typeCategories = useMemo(() => categories.filter((c) => c.type === type), [categories, type]);
+  const account = accounts.find((a) => a.id === accountId);
+
+  // Valores por defecto cuando se abre o cambian los datos
+  useEffect(() => {
+    if (!isOpen) return;
+    setDate(todayStr());
+    setAccountId((prev) =>
+      prev && accounts.some((a) => a.id === prev)
+        ? prev
+        : accounts.find((a) => a.type !== "credit")?.id || accounts[0]?.id || ""
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  useEffect(() => {
+    setCategoryId((prev) => (typeCategories.some((c) => c.id === prev) ? prev : typeCategories[0]?.id || ""));
+  }, [typeCategories]);
+
+  const floatDays = account?.type === "credit" && type === "EXPENSE" ? floatDaysFor(account, parseDate(date)) : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount.replace(/[^0-9]/g, ""));
+    const numAmount = parseFloat(amount.replace(/[^0-9.]/g, ""));
     if (!numAmount || !description.trim()) return;
 
     setIsSaving(true);
@@ -65,256 +77,213 @@ export function NewTransactionModal({
         currency: "COP",
         description: description.trim(),
         merchant: merchant.trim() || undefined,
-        category_id: categoryId || categories[0]?.id,
+        category_id: categoryId || undefined,
         account_id: accountId || accounts[0]?.id,
-        pocket_id: pocketId ? pocketId : undefined,
+        pocket_id: pocketId || undefined,
         is_recurring: isRecurring,
         recurrence_interval: isRecurring ? recurrenceInterval : undefined,
         date,
       });
-
       onTransactionSaved();
       onClose();
-
-      // Reset form
       setAmount("");
       setDescription("");
       setMerchant("");
       setPocketId("");
       setIsRecurring(false);
     } catch (err) {
-      console.error("Error guardando:", err);
+      logger.error("tx", "Error guardando movimiento", err);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.92, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.92, y: 20 }}
-          className="relative w-full max-w-md rounded-3xl bg-[#0B101D] border border-white/[0.1] shadow-2xl p-6 flex flex-col max-h-[92vh] overflow-y-auto"
-        >
-          {/* Top Bar */}
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              <span>{isEs ? "Nueva Transacción / Recurrente" : "New Transaction / Recurring"}</span>
-            </h3>
+    <Sheet
+      open={isOpen}
+      onClose={onClose}
+      title={
+        <>
+          <DollarSign className="w-4 h-4 text-emerald-400" />
+          <span className="uppercase tracking-wider">{isEs ? "Nuevo movimiento" : "New transaction"}</span>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-3.5">
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-inset border border-white/[0.06]">
+          {([
+            ["EXPENSE", isEs ? "Gasto" : "Expense", ArrowDownRight, "bg-rose-500/20 text-rose-300 border-rose-500/30"],
+            ["INCOME", isEs ? "Ingreso" : "Income", ArrowUpRight, "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"],
+          ] as const).map(([val, label, Icon, active]) => (
             <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              key={val}
+              type="button"
+              onClick={() => setType(val)}
+              className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border ${
+                type === val ? active : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
             >
-              <X className="w-4 h-4" />
+              <Icon className="w-3.5 h-3.5" />
+              {label}
             </button>
+          ))}
+        </div>
+
+        <div>
+          <label className={labelCls}>{isEs ? "Monto" : "Amount"}</label>
+          <div className="relative">
+            <input
+              type="number"
+              inputMode="decimal"
+              required
+              min="1"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="45000"
+              className={`${inputCls} text-base font-extrabold pr-14`}
+              autoFocus
+            />
+            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">COP</span>
           </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            {/* Type selector */}
-            <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-[#070A11] border border-white/[0.06]">
-              <button
-                type="button"
-                onClick={() => setType("EXPENSE")}
-                className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
-                  type === "EXPENSE"
-                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <ArrowDownRight className="w-3.5 h-3.5" />
-                <span>{isEs ? "Gasto" : "Expense"}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setType("INCOME")}
-                className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
-                  type === "INCOME"
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <ArrowUpRight className="w-3.5 h-3.5" />
-                <span>{isEs ? "Ingreso" : "Income"}</span>
-              </button>
-            </div>
+        <div>
+          <label className={labelCls}>{isEs ? "Descripción" : "Description"}</label>
+          <input
+            type="text"
+            required
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={isEs ? "Ej. Arriendo, Supermercado…" : "Ex. Rent, Groceries…"}
+            className={inputCls}
+          />
+        </div>
 
-            {/* Amount */}
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                {isEs ? "Monto" : "Amount"}
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  required
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder={isEs ? "Ej. 45000" : "Ex. 50"}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#12192B] border border-white/[0.08] text-base text-white font-extrabold placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
-                />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                  COP
-                </span>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label className={labelCls}>{isEs ? "Cuenta o tarjeta" : "Account or card"}</label>
+            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputCls}>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.type === "credit" ? "💳 " : ""}
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>{isEs ? "Categoría" : "Category"}</label>
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputCls}>
+              {typeCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
-            {/* Description */}
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                {isEs ? "Descripción o Motivo" : "Description"}
-              </label>
-              <input
-                type="text"
-                required
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={isEs ? "Ej. Arriendo, Salario quincenal, Supermercado..." : "Ex. Rent, Salary, Groceries..."}
-                className="w-full px-4 py-2.5 rounded-xl bg-[#12192B] border border-white/[0.08] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
-              />
-            </div>
+        {floatDays !== null && (
+          <div className="flex items-start gap-2 p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-[11px] text-violet-300">
+            <CreditCard className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>
+              {isEs
+                ? `Con ${account?.name} tendrás ${floatDays} días para pagar esta compra. Mantén ese dinero invertido hasta entonces.`
+                : `With ${account?.name} you get ${floatDays} days to pay this purchase.`}
+            </span>
+          </div>
+        )}
 
-            {/* Merchant */}
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                {isEs ? "Comercio o Pagador (Opcional)" : "Merchant or Payer (Optional)"}
-              </label>
-              <input
-                type="text"
-                value={merchant}
-                onChange={(e) => setMerchant(e.target.value)}
-                placeholder={isEs ? "Ej. Netflix, Spotify, Inmobiliaria, Empresa..." : "Ex. Netflix, Spotify, Landlord, Employer..."}
-                className="w-full px-4 py-2.5 rounded-xl bg-[#12192B] border border-white/[0.08] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
-              />
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label className={labelCls}>{isEs ? "Fecha" : "Date"}</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>{isEs ? "Comercio (opcional)" : "Merchant (optional)"}</label>
+            <input
+              type="text"
+              value={merchant}
+              onChange={(e) => setMerchant(e.target.value)}
+              placeholder="Netflix, Éxito…"
+              className={inputCls}
+            />
+          </div>
+        </div>
 
-            {/* Category & Pocket Selector */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                  {isEs ? "Categoría" : "Category"}
-                </label>
-                <select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#12192B] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-emerald-500/40"
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-[#0B101D] text-white">
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        {pockets.length > 0 && (
+          <div>
+            <label className={labelCls}>{isEs ? "Bolsillo vinculado (opcional)" : "Linked pocket (optional)"}</label>
+            <select value={pocketId} onChange={(e) => setPocketId(e.target.value)} className={inputCls}>
+              <option value="">{isEs ? "Sin bolsillo" : "None"}</option>
+              {pockets.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                  {isEs ? "Bolsillo Meta (Opcional)" : "Linked Pocket (Optional)"}
-                </label>
-                <select
-                  value={pocketId}
-                  onChange={(e) => setPocketId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#12192B] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-emerald-500/40"
-                >
-                  <option value="" className="bg-[#0B101D] text-slate-400">
-                    {isEs ? "Sin bolsillo asignado" : "No pocket assigned"}
-                  </option>
-                  {pockets.map((p) => (
-                    <option key={p.id} value={p.id} className="bg-[#0B101D] text-white">
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Date */}
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                {isEs ? "Fecha de Registro" : "Date"}
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-[#12192B] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-emerald-500/40"
-              />
-            </div>
-
-            {/* Recurring Section */}
-            <div className="p-3.5 rounded-2xl bg-[#070A11] border border-white/[0.08] space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Repeat className="w-4 h-4 text-cyan-400" />
-                  <div>
-                    <span className="text-xs font-bold text-white block leading-tight">
-                      {isEs ? "Compromiso / Fijo Recurrente" : "Recurring Commitment"}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {isEs ? "Suscripciones, salario periódico, arriendos, servicios" : "Subscriptions, salary, rent, bills"}
-                    </span>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={isRecurring}
-                  onChange={(e) => setIsRecurring(e.target.checked)}
-                  className="w-4 h-4 rounded text-cyan-500 bg-slate-800 border-slate-700 focus:ring-cyan-400 cursor-pointer"
-                />
-              </div>
-
-              {isRecurring && (
-                <div className="pt-2 border-t border-white/[0.06] animate-in fade-in duration-200">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 block mb-1">
-                    {isEs ? "Frecuencia de Repetición" : "Recurrence Frequency"}
-                  </label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[
-                      { id: "WEEKLY" as const, label: isEs ? "Semanal" : "Weekly" },
-                      { id: "BIWEEKLY" as const, label: isEs ? "Quincenal" : "Biweekly" },
-                      { id: "MONTHLY" as const, label: isEs ? "Mensual" : "Monthly" },
-                      { id: "YEARLY" as const, label: isEs ? "Anual" : "Yearly" },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setRecurrenceInterval(item.id)}
-                        className={`py-1.5 px-1 rounded-xl text-[10px] font-bold transition-colors ${
-                          recurrenceInterval === item.id
-                            ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
-                            : "bg-slate-900 text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-xs font-bold text-slate-950 shadow-lg shadow-emerald-500/25 hover:opacity-95 transition-opacity flex items-center justify-center gap-1.5 mt-2"
-            >
-              <Check className="w-4 h-4 stroke-[3]" />
+        <div className="p-3.5 rounded-2xl bg-inset border border-white/[0.08] space-y-2.5">
+          <label className="flex items-center justify-between gap-3 cursor-pointer">
+            <span className="flex items-center gap-2">
+              <Repeat className="w-4 h-4 text-cyan-400" />
               <span>
-                {isSaving
-                  ? (isEs ? "Guardando en la Bóveda..." : "Saving...")
-                  : isRecurring
-                  ? (isEs ? "Guardar Movimiento Recurrente" : "Save Recurring Movement")
-                  : (isEs ? "Registrar en Bóveda" : "Save Transaction")}
+                <span className="text-xs font-bold text-white block leading-tight">
+                  {isEs ? "Compromiso recurrente" : "Recurring"}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {isEs ? "Te avisamos antes de cada vencimiento" : "We remind you before each due date"}
+                </span>
               </span>
-            </button>
-          </form>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+            </span>
+            <input
+              type="checkbox"
+              checked={isRecurring}
+              onChange={(e) => setIsRecurring(e.target.checked)}
+              className="w-5 h-5 accent-cyan-500"
+            />
+          </label>
+          {isRecurring && (
+            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-white/[0.06]">
+              {([
+                ["WEEKLY", isEs ? "Semanal" : "Weekly"],
+                ["BIWEEKLY", isEs ? "Quincenal" : "Biweekly"],
+                ["MONTHLY", isEs ? "Mensual" : "Monthly"],
+                ["YEARLY", isEs ? "Anual" : "Yearly"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setRecurrenceInterval(id)}
+                  className={`py-2 rounded-xl text-[10px] font-bold transition-colors ${
+                    recurrenceInterval === id
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                      : "bg-slate-900 text-slate-400"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-xs font-bold text-slate-950 shadow-lg shadow-emerald-500/25 hover:opacity-95 transition-opacity flex items-center justify-center gap-1.5 disabled:opacity-60"
+        >
+          <Check className="w-4 h-4 stroke-[3]" />
+          {isSaving
+            ? isEs ? "Guardando…" : "Saving…"
+            : isRecurring
+            ? isEs ? "Guardar recurrente" : "Save recurring"
+            : isEs ? "Registrar" : "Save"}
+        </button>
+        {amount && <p className="text-center text-[11px] text-slate-400">{formatMoney(parseFloat(amount) || 0)}</p>}
+      </form>
+    </Sheet>
   );
 }

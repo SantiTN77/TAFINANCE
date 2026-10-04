@@ -210,7 +210,7 @@ function LockContent() {
   }, [handleDigit, handleDelete]);
 
   return (
-    <div className="min-h-screen bg-[#070A11] text-white flex flex-col items-center justify-between p-6 select-none overflow-hidden relative">
+    <div className="min-h-screen bg-app text-white flex flex-col items-center justify-between p-6 select-none overflow-hidden relative">
       {/* Background ambient lighting */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-80 h-80 bg-violet-600/10 rounded-full blur-[100px] pointer-events-none" />
@@ -408,7 +408,7 @@ export default function LockPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#070A11] flex items-center justify-center">
+        <div className="min-h-screen bg-app flex items-center justify-center">
           <div className="w-8 h-8 rounded-full border-2 border-emerald-500/30 border-t-emerald-400 animate-spin" />
         </div>
       }

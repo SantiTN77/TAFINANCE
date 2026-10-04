@@ -5,6 +5,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Target, AlertTriangle } from "lucide-react";
 
 interface BudgetProgressProps {
+  monthLabel?: string;
   budgets: {
     categoryId: string;
     categoryName: string;
@@ -14,7 +15,7 @@ interface BudgetProgressProps {
   }[];
 }
 
-export function BudgetProgress({ budgets }: BudgetProgressProps) {
+export function BudgetProgress({ budgets, monthLabel }: BudgetProgressProps) {
   if (!budgets || budgets.length === 0) return null;
 
   return (
@@ -26,7 +27,7 @@ export function BudgetProgress({ budgets }: BudgetProgressProps) {
             Control de Presupuestos
           </h3>
         </div>
-        <span className="text-[11px] text-slate-400">Octubre 2026</span>
+        <span className="text-[11px] text-slate-400">{monthLabel}</span>
       </div>
 
       <div className="space-y-3.5">
@@ -50,7 +51,7 @@ export function BudgetProgress({ budgets }: BudgetProgressProps) {
               </div>
 
               {/* Progress Bar Container */}
-              <div className="w-full h-2 rounded-full bg-slate-800/80 overflow-hidden relative">
+              <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden relative">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
                     isOver

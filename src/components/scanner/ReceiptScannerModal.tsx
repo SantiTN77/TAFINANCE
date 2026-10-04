@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, UploadCloud, Camera, Check, Sparkles, Tag, ShoppingBag, Receipt, AlertCircle } from "lucide-react";
 import { ScannedReceipt } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
+import { matchCategory, todayStr } from "@/lib/finance/calc";
 
 interface ReceiptScannerModalProps {
   isOpen: boolean;
@@ -71,8 +72,8 @@ export function ReceiptScannerModal({
       const categories = await financeStore.getCategories();
       const accounts = await financeStore.getAccounts();
 
-      const matchedCat = categories.find((c) => c.name.toLowerCase() === scannedResult.category.toLowerCase()) || categories[0];
-      const matchedAcc = accounts[0];
+      const matchedCat = matchCategory(categories, scannedResult.category, "EXPENSE", scannedResult.merchant);
+      const matchedAcc = accounts.find((a) => a.type !== "credit") || accounts[0];
 
       await financeStore.addTransaction({
         account_id: matchedAcc?.id,
@@ -82,9 +83,8 @@ export function ReceiptScannerModal({
         currency: scannedResult.currency || "COP",
         description: `Factura en ${scannedResult.merchant}`,
         merchant: scannedResult.merchant,
-        receipt_url: imagePreview || undefined,
         raw_prompt: `Escaneo OCR: ${scannedResult.items.length} ítems en ${scannedResult.merchant}`,
-        date: scannedResult.date || new Date().toISOString().split("T")[0],
+        date: scannedResult.date || todayStr(),
       });
 
       onReceiptSaved();
@@ -113,7 +113,7 @@ export function ReceiptScannerModal({
           initial={{ opacity: 0, scale: 0.92, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.92, y: 20 }}
-          className="relative w-full max-w-md rounded-3xl bg-[#0B101D] border border-white/[0.1] shadow-2xl p-6 flex flex-col items-center max-h-[90vh] overflow-y-auto"
+          className="relative w-full max-w-md rounded-3xl bg-card border border-white/[0.1] shadow-2xl p-6 flex flex-col items-center max-h-[90vh] overflow-y-auto"
         >
           {/* Top Bar */}
           <div className="w-full flex items-center justify-between mb-4">
@@ -135,7 +135,7 @@ export function ReceiptScannerModal({
           {!imagePreview && (
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="w-full border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-3xl p-8 flex flex-col items-center justify-center cursor-pointer transition-colors bg-[#0E1527]/50 group"
+              className="w-full border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-3xl p-8 flex flex-col items-center justify-center cursor-pointer transition-colors bg-inset/50 group"
             >
               <input
                 ref={fileInputRef}
@@ -192,7 +192,7 @@ export function ReceiptScannerModal({
 
           {/* Extracted Details */}
           {scannedResult && !isScanning && (
-            <div className="w-full bg-[#12192B] rounded-2xl p-4 border border-emerald-500/30 mb-4 shadow-lg">
+            <div className="w-full bg-inset rounded-2xl p-4 border border-emerald-500/30 mb-4 shadow-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
                   <Receipt className="w-3.5 h-3.5" />
@@ -244,7 +244,7 @@ export function ReceiptScannerModal({
                 <button
                   onClick={handleConfirmSave}
                   disabled={isSaving}
-                  className="flex-[2] py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-xs font-bold text-white shadow-lg shadow-emerald-500/25 hover:opacity-95 transition-opacity flex items-center justify-center gap-1.5"
+                  className="flex-[2] py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-xs font-bold text-on-accent shadow-lg shadow-emerald-500/25 hover:opacity-95 transition-opacity flex items-center justify-center gap-1.5"
                 >
                   <Check className="w-4 h-4 stroke-[3]" />
                   {isSaving ? "Guardando..." : "Guardar en TAFINANCE"}

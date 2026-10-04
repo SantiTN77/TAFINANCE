@@ -50,7 +50,7 @@ export function BottomNav({ activeTab, onTabChange, onQuickAdd }: BottomNavProps
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-5 pt-2 pointer-events-none">
       <div className="max-w-md mx-auto pointer-events-auto">
-        <div className="glass-panel rounded-full px-2 py-1.5 flex items-center justify-between border-white/[0.1] shadow-2xl backdrop-blur-2xl bg-[#0D1322]/95">
+        <div className="glass-panel rounded-full px-2 py-1.5 flex items-center justify-between border-white/[0.1] shadow-2xl backdrop-blur-2xl bg-card/95">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -66,7 +66,7 @@ export function BottomNav({ activeTab, onTabChange, onQuickAdd }: BottomNavProps
                   aria-label={label}
                 >
                   <div className="w-13 h-13 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-400 p-[2px] shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-transform duration-200 group-hover:scale-105 active:scale-95">
-                    <div className="w-full h-full rounded-full bg-[#070A11] flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-app flex items-center justify-center">
                       <Sparkles className="w-5 h-5 text-emerald-400 transition-colors" />
                     </div>
                   </div>

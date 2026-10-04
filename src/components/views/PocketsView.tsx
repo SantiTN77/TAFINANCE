@@ -91,13 +91,13 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
   return (
     <div className="flex flex-col gap-5 pb-28">
       {/* Header Banner */}
-      <section className="relative overflow-hidden rounded-2xl bg-[#141923] border border-white/[0.06] p-5 shadow-xl">
+      <section className="relative overflow-hidden rounded-2xl bg-card border border-white/[0.06] p-5 shadow-xl">
         <div className="absolute top-0 right-0 w-36 h-36 bg-[#4cd7f6]/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-[#4cd7f6]/15 text-[#4cd7f6] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-[#4cd7f6]/15 text-sky2 flex items-center justify-center">
                 <Wallet className="w-4 h-4" />
               </div>
               <div>
@@ -112,7 +112,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
 
             <button
               onClick={() => setIsNewModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#494bd6] to-[#8083ff] text-white text-xs font-semibold shadow-md active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#494bd6] to-[#8083ff] text-on-accent text-xs font-semibold shadow-md active:scale-95 transition-all"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{t("newPocketBtn")}</span>
@@ -135,7 +135,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
             </div>
           </div>
 
-          <div className="w-full bg-[#0a0e16] h-2 rounded-full overflow-hidden">
+          <div className="w-full bg-inset h-2 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-[#8083ff] to-[#4cd7f6] rounded-full transition-all duration-700"
               style={{ width: `${Math.min(100, Math.max(0, overallProgress))}%` }}
@@ -145,7 +145,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
           {/* Auto-Pilot Toggle */}
           <div className="flex items-center justify-between pt-1 text-xs">
             <span className="text-slate-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#4edea3]" />
+              <Sparkles className="w-3.5 h-3.5 text-mint" />
               {t("autoPilotLabel")}
             </span>
             <button
@@ -156,7 +156,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
               }}
               className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
                 autoPilot
-                  ? "bg-[#4edea3]/15 text-[#4edea3] border border-[#4edea3]/30"
+                  ? "bg-[#4edea3]/15 text-mint border border-[#4edea3]/30"
                   : "bg-slate-800 text-slate-400"
               }`}
             >
@@ -168,9 +168,9 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
 
       {/* Pockets List */}
       {pockets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-8 rounded-2xl bg-[#141923]/60 border border-white/[0.04] text-center my-4">
+        <div className="flex flex-col items-center justify-center p-8 rounded-2xl bg-card/60 border border-white/[0.04] text-center my-4">
           <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-slate-400 mb-3">
-            <Wallet className="w-6 h-6 text-[#4cd7f6]" />
+            <Wallet className="w-6 h-6 text-sky2" />
           </div>
           <h3 className="text-sm font-bold text-white mb-1">
             Empieza a ahorrar con Bolsillos
@@ -180,7 +180,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
           </p>
           <button
             onClick={() => setIsNewModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#494bd6] to-[#8083ff] text-white text-xs font-bold shadow-lg hover:opacity-95 active:scale-95 transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#494bd6] to-[#8083ff] text-on-accent text-xs font-bold shadow-lg hover:opacity-95 active:scale-95 transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>Crear mi primer bolsillo</span>
@@ -197,7 +197,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
             return (
               <div
                 key={pkt.id}
-                className="relative overflow-hidden rounded-2xl bg-[#141923] border border-white/[0.06] p-4 flex flex-col justify-between gap-3 shadow-lg hover:border-white/[0.12] transition-all"
+                className="relative overflow-hidden rounded-2xl bg-card border border-white/[0.06] p-4 flex flex-col justify-between gap-3 shadow-lg hover:border-white/[0.12] transition-all"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2.5">
@@ -235,7 +235,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                     </span>
                   </div>
 
-                  <div className="w-full bg-[#0a0e16] h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-inset h-1.5 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -256,7 +256,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                   onClick={() => setSelectedPocketForTransfer(pkt)}
                   className="w-full py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-white border border-white/[0.06] flex items-center justify-center gap-1.5 transition-colors active:scale-98"
                 >
-                  <ArrowUpRight className="w-3.5 h-3.5 text-[#4cd7f6]" />
+                  <ArrowUpRight className="w-3.5 h-3.5 text-sky2" />
                   <span>Aportar Fondos</span>
                 </button>
               </div>
@@ -267,8 +267,8 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
 
       {/* MODAL: Create New Pocket */}
       {isNewModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-[#141923] border border-white/[0.1] p-5 shadow-2xl flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm ">
+          <div className="w-full max-w-sm rounded-2xl bg-card border border-white/[0.1] p-5 shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white">Nuevo Bolsillo de Ahorro</h3>
               <button
@@ -288,7 +288,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                   placeholder="Ej. Fondo de Emergencia, Vacaciones..."
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl bg-[#0a0e16] border border-white/[0.08] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#8083ff]"
+                  className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#8083ff]"
                 />
               </div>
 
@@ -300,7 +300,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                   placeholder="Ej. 1000000"
                   value={targetAmount}
                   onChange={(e) => setTargetAmount(e.target.value)}
-                  className="w-full rounded-xl bg-[#0a0e16] border border-white/[0.08] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#8083ff]"
+                  className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#8083ff]"
                 />
               </div>
 
@@ -309,7 +309,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-xl bg-[#0a0e16] border border-white/[0.08] px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#8083ff]"
+                  className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#8083ff]"
                 >
                   <option value="Ahorro">Ahorro General</option>
                   <option value="Emergencia">Fondo de Emergencia</option>
@@ -346,7 +346,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#494bd6] to-[#8083ff] text-xs font-bold text-white shadow-md active:scale-95 transition-all"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#494bd6] to-[#8083ff] text-xs font-bold text-on-accent shadow-md active:scale-95 transition-all"
                 >
                   Guardar Bolsillo
                 </button>
@@ -358,8 +358,8 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
 
       {/* MODAL: Deposit Funds to Pocket */}
       {selectedPocketForTransfer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-[#141923] border border-white/[0.1] p-5 shadow-2xl flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm ">
+          <div className="w-full max-w-sm rounded-2xl bg-card border border-white/[0.1] p-5 shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white">
                 Aportar a: {selectedPocketForTransfer.name}
@@ -382,7 +382,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                   placeholder="Ej. 50000"
                   value={transferAmount}
                   onChange={(e) => setTransferAmount(e.target.value)}
-                  className="w-full rounded-xl bg-[#0a0e16] border border-white/[0.08] px-3.5 py-2.5 text-base text-white placeholder-slate-500 focus:outline-none focus:border-[#4cd7f6]"
+                  className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-base text-white placeholder-slate-500 focus:outline-none focus:border-[#4cd7f6]"
                 />
               </div>
 

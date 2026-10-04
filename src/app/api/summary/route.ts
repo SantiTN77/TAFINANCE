@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { financeStore } from "@/lib/storage/finance-store";
+import { monthKey } from "@/lib/finance/calc";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const month = searchParams.get("month") || "2026-10";
+    const month = searchParams.get("month") || monthKey();
 
     const summary = await financeStore.getSummary(month);
     return NextResponse.json(summary);

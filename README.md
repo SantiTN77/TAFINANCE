@@ -1,121 +1,60 @@
-# TAFINANCE 💎 — Tu Asistente Personal de Finanzas con IA en Tiempo Real
+# TAFINANCE
 
-> Aplicación PWA de contabilidad personal de alta gama (estilo **MoneAI / iOS**) impulsada por **Gemini AI Studio** con **Orbe de Voz Live**, escáner de facturas multimodal, base de datos relacional en **Supabase**, y servidor **MCP / API REST** para automatizaciones con **Google Spark**.
+App PWA de finanzas personales: registra gastos con voz, escanea facturas, organiza bolsillos y tarjetas de crédito, y recibe avisos de pago aunque la app esté cerrada.
 
-![TAFINANCE Banner](public/icon.svg)
+## Características
 
----
+- **Voz**: dicta «gasté 45 mil en almuerzo». Usa el reconocimiento del navegador y, si no está disponible o falla, graba el audio y lo transcribe con Gemini (requiere `GEMINI_API_KEY`). Siempre hay un campo de texto como alternativa.
+- **Escáner de facturas** (Gemini multimodal): comercio, total e ítems.
+- **Estadísticas en tiempo real**: patrimonio, gráfica de evolución, distribución por categoría, presupuestos y **cierre de mes** navegable (con opción de apartar el excedente en un bolsillo).
+- **Cuentas y tarjetas**: día de corte y de pago, extracto cerrado vs. por facturar, pago de tarjeta y estimación de la rentabilidad de los días de financiación.
+- **Recordatorios y push**: corte, vencimiento (N días antes) y compromisos recurrentes, con notificaciones Web Push aunque la app esté cerrada.
+- **PWA**: instalable, funciona sin conexión (los cambios se sincronizan al volver la red), temas claro / oscuro / OLED.
+- **Depuración**: consola de logs en vivo con `?debug=1` (o Ajustes → Depuración); `window.__taf` en DevTools.
 
-## ✨ Características Principales
+## Acceso
 
-1. **🎙️ Modo Principal de Voz Live con Orbe Animado**:
-   - Orbe 3D reactivo que pulsa y respira según el volumen de tu micrófono.
-   - Procesamiento en lenguaje natural:
-     - *"Gasté 45 mil en comida amigos"* ➔ Extrae monto ($45.000 COP), categoría (*Alimentación & Restaurantes*), tipo (*GASTO*).
-     - *"Recibí pago de nómina"* ➔ Extrae ingreso, categoría (*Salario & Nómina*).
-     - *"30 mil de Spotify premium"* ➔ Registra $30.000 en *Suscripciones & Ocio*.
-   - **Coste $0 Garantizado**: Integrado con la capa gratuita de Google AI Studio (`gemini-3.5-flash-lite` y Web Speech API nativa).
+La landing es pública y no expone ningún acceso. La bóveda se abre desde el logo con una secuencia secreta (7 toques → mantener 3 s → 10 toques) y luego PIN o huella.
 
-2. **🧾 Escáner OCR Multimodal de Facturas y Recibos**:
-   - Sube o toma una foto desde la cámara de tu factura física o digital.
-   - Detección visual con Gemini Multimodal: extrae comercio, fecha, desglose de ítems, IVA y total a pagar.
+## Stack
 
-3. **📊 Estadísticas y Gráficos Live (Cero Mocks)**:
-   - Gráfico de curva SVG interactiva con evolución del patrimonio neto.
-   - Gráfico de dona de distribución de gastos por categoría en tiempo real.
-   - Barras de control de presupuestos mensuales con alertas visuales de consumo.
+Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · Framer Motion · Supabase · Google Gemini (`@google/genai`) · Web Push (`web-push`) · pnpm.
 
-4. **📱 Progressive Web App (PWA) Móvil**:
-   - Instalable en iPhone (iOS Safari "Añadir a pantalla de inicio") y Android.
-   - Modo oscuro refinado con glassmorphism, tipografía SF Pro y animaciones fluidas con Framer Motion.
+## Puesta en marcha
 
-5. **⚡ Conexión con Supabase & Modo Local Offline**:
-   - Tablas contables ACID en PostgreSQL: `accounts`, `categories`, `transactions`, `budgets`.
-   - Motor de persistencia local-first integrado para funcionar sin conexión o sin configurar credenciales de inmediato.
-
-6. **🤖 Servidor MCP & API REST para Google Spark**:
-   - Servidor **Model Context Protocol (MCP)** en `mcp/server.ts` con herramientas (`tafinance_create_transaction`, `tafinance_get_balance`, `tafinance_list_transactions`, `tafinance_get_budget_status`, `tafinance_process_natural_command`).
-   - Endpoints REST `/api/transactions`, `/api/summary`, `/api/budgets`, `/api/voice/parse`, `/api/ocr/scan`.
-
----
-
-## 🛠️ Stack Tecnológico
-
-- **Framework**: Next.js 15 (App Router, React 19, TypeScript)
-- **Gestor de Paquetes**: `pnpm` (estrictamente)
-- **Estilos**: Tailwind CSS + Framer Motion
-- **Iconografía**: Lucide React
-- **IA**: `@google/genai` (Google AI Studio Gemini 3.5 Flash-Lite & Gemini 3.8 Live)
-- **Base de Datos**: Supabase (PostgreSQL con RLS)
-- **MCP**: `@modelcontextprotocol/sdk`
-- **Hosting**: Vercel
-
----
-
-## 🚀 Instalación y Puesta en Marcha
-
-### 1. Clonar el repositorio
-```bash
-git clone https://github.com/SantiTN77/TAFINANCE.git
-cd TAFINANCE
-```
-
-### 2. Instalar dependencias con pnpm
 ```bash
 pnpm install
-```
-
-### 3. Configurar variables de entorno
-Crea un archivo `.env.local` basado en `.env.example`:
-```bash
-cp .env.example .env.local
-```
-
-Configura tus claves:
-```env
-# Google AI Studio (Gratuito)
-GEMINI_API_KEY=tu_api_key_de_ai_studio
-
-# Supabase (Opcional - La app incluye almacenamiento local reactivo)
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_clave_anonima
-```
-
-### 4. Ejecutar en Desarrollo
-```bash
+cp .env.example .env.local   # completa las variables
 pnpm dev
 ```
-Abre en tu navegador: [http://localhost:3000](http://localhost:3000)
 
----
+Variables (ver `.env.example`): `TAFINANCE_PIN`, `TAFINANCE_SECRET`, `GEMINI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`, `MCP_TOKEN`.
 
-## 🤖 Servidor MCP para Google Spark
+Base de datos: aplica las migraciones de `supabase/migrations/` (la última agrega tarjetas, transferencias entre cuentas y `push_subscriptions`).
 
-Para conectar TAFINANCE a Google Spark o cualquier orquestador compatible con MCP:
+Pruebas:
 
 ```bash
-pnpm mcp
+pnpm test
 ```
 
-Herramientas disponibles:
-- `tafinance_get_balance`: Consulta el balance total y saldo de cada cuenta.
-- `tafinance_create_transaction`: Registra ingresos o gastos programáticamente.
-- `tafinance_list_transactions`: Filtra transacciones recientes.
-- `tafinance_get_budget_status`: Consulta el presupuesto mensual disponible.
-- `tafinance_process_natural_command`: Ejecuta frases de voz como *"Gasté 45 mil en comida amigos"*.
+## Notificaciones push
 
----
+1. Genera las claves: `npx web-push generate-vapid-keys`.
+2. Define `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` y `CRON_SECRET` en Vercel.
+3. `vercel.json` programa `/api/push/cron` cada día a las 13:00 UTC (08:00 Colombia). Vercel envía `Authorization: Bearer $CRON_SECRET`.
+4. En la app: Ajustes → Avisos de pagos y cortes → Activar. En iPhone, primero instala la app en la pantalla de inicio.
 
-## 🌐 Despliegue en Vercel
+## Servidor MCP (opcional)
 
-El proyecto está 100% optimizado para Vercel:
+`/api/mcp` queda deshabilitado hasta definir `MCP_TOKEN`; los clientes deben enviar `Authorization: Bearer <MCP_TOKEN>` (o `?token=`).
 
-1. Ve a [vercel.com](https://vercel.com) e importa el repositorio `SantiTN77/TAFINANCE`.
-2. Configura las variables de entorno (`GEMINI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-3. Haz clic en **Deploy**. ¡Listo en menos de 2 minutos!
+## Seguridad
 
----
+- Sin `TAFINANCE_PIN` en producción se usa un PIN de desarrollo: **defínelo siempre**.
+- La biometría se valida en el servidor (firma WebAuthn) y queda ligada al dispositivo mediante una cookie firmada.
+- Las tablas de Supabase usan políticas abiertas (uso personal). Para endurecer, define `SUPABASE_SERVICE_ROLE_KEY` y mueve el acceso a rutas del servidor.
 
-## 📄 Licencia
+## Licencia
 
-MIT © 2026 Daniel Tafur (SantiTN77)
+MIT

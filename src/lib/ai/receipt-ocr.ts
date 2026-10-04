@@ -1,4 +1,5 @@
 import { getGeminiClient } from "./gemini-client";
+import { todayStr, monthKey } from "@/lib/finance/calc";
 import { ScannedReceipt } from "@/types/finance";
 
 export async function scanReceiptImage(
@@ -56,7 +57,7 @@ Responde ÚNICAMENTE un objeto JSON válido con estas propiedades.
 
       return {
         merchant: parsed.merchant || "Comercio no identificado",
-        date: parsed.date || new Date().toISOString().split("T")[0],
+        date: parsed.date || todayStr(),
         total: Number(parsed.total) || 0,
         currency: parsed.currency || "COP",
         tax: Number(parsed.tax) || 0,
@@ -71,7 +72,7 @@ Responde ÚNICAMENTE un objeto JSON válido con estas propiedades.
   // Fallback / Offline simulation for instant verification
   return {
     merchant: "Supermercado Éxito Express",
-    date: new Date().toISOString().split("T")[0],
+    date: todayStr(),
     total: 87500,
     currency: "COP",
     tax: 12500,

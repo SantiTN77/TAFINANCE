@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { todayStr, monthKey } from "@/lib/finance/calc";
+import { checkMcpAuth } from "@/lib/auth/mcp-auth";
 import { financeStore } from "@/lib/storage/finance-store";
 import { parseVoiceFinancialInput } from "@/lib/ai/gemini-client";
 
@@ -199,7 +201,7 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
       const description = String(args?.description || "");
       const merchant = args?.merchant as string | undefined;
       const categoryName = args?.category_name as string | undefined;
-      const date = (args?.date as string) || new Date().toISOString().split("T")[0];
+      const date = (args?.date as string) || todayStr();
 
       const categories = await financeStore.getCategories();
       const matchedCategory = categoryName
@@ -299,7 +301,7 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
     }
 
     case "tafinance_get_budget_status": {
-      const month = (args?.month as string) || new Date().toISOString().slice(0, 7);
+      const month = (args?.month as string) || monthKey();
       const summary = await financeStore.getSummary(month);
       return {
         content: [
@@ -331,7 +333,7 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
         raw_prompt: command,
         category_id: matchedCategory?.id || categories[0]?.id,
         account_id: accounts[0]?.id,
-        date: parsed.date || new Date().toISOString().split("T")[0],
+        date: parsed.date || todayStr(),
       });
 
       return {
@@ -373,13 +375,16 @@ export async function OPTIONS() {
 
 // GET: Server-Sent Events (SSE) Endpoint for MCP Handshake
 export async function GET(req: NextRequest) {
+  const denied = checkMcpAuth(req, CORS_HEADERS);
+  if (denied) return denied;
   const acceptHeader = req.headers.get("accept") || "";
   const host = req.headers.get("host") || "tafinance.vercel.app";
   const protocol = req.nextUrl.protocol || "https:";
   const baseUrl = `${protocol}//${host}`;
 
   const sessionId = Math.random().toString(36).substring(2, 15);
-  const postEndpoint = `${baseUrl}/api/mcp?sessionId=${sessionId}`;
+  const qsToken = req.nextUrl.searchParams.get("token");
+  const postEndpoint = `${baseUrl}/api/mcp?sessionId=${sessionId}${qsToken ? `&token=${encodeURIComponent(qsToken)}` : ""}`;
 
   // If client wants SSE (standard MCP protocol)
   if (acceptHeader.includes("text/event-stream") || req.nextUrl.searchParams.has("sse")) {
@@ -430,6 +435,8 @@ export async function GET(req: NextRequest) {
 
 // POST: JSON-RPC 2.0 Handler for MCP
 export async function POST(req: NextRequest) {
+  const denied = checkMcpAuth(req, CORS_HEADERS);
+  if (denied) return denied;
   try {
     const body = await req.json();
     const { jsonrpc, id, method, params } = body;

@@ -20,6 +20,7 @@ import {
 import { Pocket, ParsedVoiceTransaction } from "@/types/finance";
 import { useApp } from "@/lib/context/AppContext";
 import { financeStore } from "@/lib/storage/finance-store";
+import { matchCategory, todayStr } from "@/lib/finance/calc";
 
 interface CopilotMessage {
   id: string;
@@ -100,7 +101,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
       const res = await fetch("/api/voice/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: cleanText }),
+        body: JSON.stringify({ text: cleanText, today: todayStr(), categories: (await financeStore.getCategories()).map((c) => c.name) }),
       });
 
       let parsed: ParsedVoiceTransaction | null = null;
@@ -224,11 +225,8 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
       const categories = await financeStore.getCategories();
       const accounts = await financeStore.getAccounts();
 
-      const matchedCat =
-        categories.find(
-          (c) => c.name.toLowerCase() === parsedTx.category.toLowerCase()
-        ) || categories[0];
-      const matchedAcc = accounts[0];
+      const matchedCat = matchCategory(categories, parsedTx.category, parsedTx.type, `${parsedTx.description} ${parsedTx.merchant || ""}`);
+      const matchedAcc = accounts.find((a) => a.type !== "credit") || accounts[0];
 
       await financeStore.addTransaction({
         account_id: matchedAcc?.id,
@@ -239,7 +237,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
         description: parsedTx.description,
         merchant: parsedTx.merchant,
         raw_prompt: parsedTx.description,
-        date: parsedTx.date || new Date().toISOString().split("T")[0],
+        date: parsedTx.date || todayStr(),
       });
 
       onShowToast(
@@ -324,7 +322,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
       ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] max-h-[750px] pb-20">
+    <div className="flex flex-col h-[calc(100dvh-190px)] min-h-[420px] max-h-[760px] pb-2">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3">
         <div className="flex items-center gap-2">
@@ -369,7 +367,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
                 className={`p-3.5 rounded-2xl text-xs leading-relaxed shadow-sm ${
                   msg.sender === "user"
                     ? "bg-emerald-500 text-slate-950 font-semibold rounded-tr-none"
-                    : "bg-[#141923] text-slate-200 border border-white/[0.06] rounded-tl-none"
+                    : "bg-card text-slate-200 border border-white/[0.06] rounded-tl-none"
                 }`}
               >
                 {msg.text}
@@ -377,7 +375,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
 
               {/* Action Card if present */}
               {msg.actionCard && (
-                <div className="p-3 rounded-2xl bg-[#12192B] border border-emerald-500/30 shadow-md flex flex-col gap-2">
+                <div className="p-3 rounded-2xl bg-inset border border-emerald-500/30 shadow-md flex flex-col gap-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
                       {msg.actionCard.type === "transaction_register" ? (
@@ -449,7 +447,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
           <button
             key={idx}
             onClick={() => handleSend(chip)}
-            className="px-3 py-1.5 rounded-full bg-[#141923] border border-white/[0.06] text-[11px] text-slate-300 hover:text-white hover:border-emerald-500/40 whitespace-nowrap transition-colors shrink-0"
+            className="px-3 py-1.5 rounded-full bg-card border border-white/[0.06] text-[11px] text-slate-300 hover:text-white hover:border-emerald-500/40 whitespace-nowrap transition-colors shrink-0"
           >
             {chip}
           </button>
@@ -470,7 +468,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
           className={`p-2.5 rounded-2xl border transition-all ${
             isListening
               ? "bg-rose-500/20 border-rose-500/40 text-rose-300 animate-pulse"
-              : "bg-[#141923] border-white/[0.08] text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30"
+              : "bg-card border-white/[0.08] text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30"
           }`}
           title={isListening ? "Detener dictado" : "Hablar al Copiloto"}
         >
@@ -486,7 +484,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
               ? (isEs ? "Escuchando... Di tu movimiento..." : "Listening...")
               : (isEs ? "Escribe o dicta: 'Gasté 30 mil en Uber'..." : "Type or dictate: 'Spent 30 on Uber'...")
           }
-          className="flex-1 px-4 py-2.5 rounded-2xl bg-[#141923] border border-white/[0.08] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
+          className="flex-1 px-4 py-2.5 rounded-2xl bg-card border border-white/[0.08] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
         />
 
         <button

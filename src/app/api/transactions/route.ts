@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { todayStr, monthKey } from "@/lib/finance/calc";
 import { financeStore } from "@/lib/storage/finance-store";
 
 export async function GET(req: NextRequest) {
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
       raw_prompt,
       category_id: category_id || categories[0]?.id,
       account_id: account_id || accounts[0]?.id,
-      date: date || new Date().toISOString().split("T")[0],
+      date: date || todayStr(),
     });
 
     return NextResponse.json(newTx, { status: 201 });

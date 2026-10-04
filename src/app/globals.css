@@ -2,100 +2,163 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ */
+/* Tokens de tema (canales RGB para soportar opacidades de Tailwind)    */
+/* ------------------------------------------------------------------ */
 :root {
-  --background: #070a11;
-  --foreground: #f8fafc;
+  color-scheme: dark;
+  --c-app: 7 10 17;
+  --c-card: 13 19 34;
+  --c-inset: 18 25 43;
+  --c-ink: 255 255 255;
+  --c-mint: 78 222 163;
+  --c-sky: 76 215 246;
+  --c-indigo: 128 131 255;
+
+  --s-100: 241 245 249;
+  --s-200: 226 232 240;
+  --s-300: 203 213 225;
+  --s-400: 148 163 184;
+  --s-500: 100 116 139;
+  --s-600: 71 85 105;
+  --s-700: 51 65 85;
+  --s-800: 30 41 59;
+  --s-900: 15 23 42;
+
+  --a-emerald-300: 110 231 183;
+  --a-emerald-400: 52 211 153;
+  --a-teal-300: 94 234 212;
+  --a-teal-400: 45 212 191;
+  --a-cyan-300: 103 232 249;
+  --a-cyan-400: 34 211 238;
+  --a-rose-300: 253 164 175;
+  --a-rose-400: 251 113 133;
+  --a-amber-300: 252 211 77;
+  --a-amber-400: 251 191 36;
+  --a-violet-300: 196 181 253;
+  --a-violet-400: 167 139 250;
+
+  --shadow-card: 0 10px 15px -3px rgb(0 0 0 / 0.4);
+  --scroll-thumb: #1e293b;
 }
 
 html.light {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  color-scheme: light;
+  --c-app: 241 245 249;
+  --c-card: 255 255 255;
+  --c-inset: 241 245 249;
+  --c-ink: 15 23 42;
+  --c-mint: 5 150 105;
+  --c-sky: 2 132 199;
+  --c-indigo: 79 70 229;
+
+  /* escala slate invertida: los "100" son el texto fuerte, los "800/900" las superficies */
+  --s-100: 15 23 42;
+  --s-200: 30 41 59;
+  --s-300: 51 65 85;
+  --s-400: 71 85 105;
+  --s-500: 100 116 139;
+  --s-600: 148 163 184;
+  --s-700: 203 213 225;
+  --s-800: 226 232 240;
+  --s-900: 241 245 249;
+
+  --a-emerald-300: 4 120 87;
+  --a-emerald-400: 5 150 105;
+  --a-teal-300: 15 118 110;
+  --a-teal-400: 13 148 136;
+  --a-cyan-300: 14 116 144;
+  --a-cyan-400: 8 145 178;
+  --a-rose-300: 190 18 60;
+  --a-rose-400: 225 29 72;
+  --a-amber-300: 180 83 9;
+  --a-amber-400: 202 138 4;
+  --a-violet-300: 109 40 217;
+  --a-violet-400: 124 58 237;
+
+  --shadow-card: 0 4px 20px -2px rgb(15 23 42 / 0.08);
+  --scroll-thumb: #cbd5e1;
 }
 
 html.oled {
-  --background: #000000;
-  --foreground: #ffffff;
+  --c-app: 0 0 0;
+  --c-card: 8 8 10;
+  --c-inset: 18 18 22;
+  --scroll-thumb: #27272a;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: rgb(var(--c-ink));
+  background: rgb(var(--c-app));
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
-html.light body {
-  background-color: #f1f5f9;
-  color: #0f172a;
+/* Sin parpadeo al cambiar de tema */
+body,
+header,
+section,
+nav {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-html.oled body {
-  background-color: #000000;
-  color: #ffffff;
-}
-
-/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: var(--scroll-thumb);
   border-radius: 9999px;
 }
 
-html.light ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
-}
-
-/* Glassmorphism helpers */
+/* Glassmorphism */
 .glass-panel {
-  background: rgba(13, 19, 34, 0.75);
+  background: rgb(var(--c-card) / 0.8);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-html.light .glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
-}
-
-html.oled .glass-panel {
-  background: #050505;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgb(var(--c-ink) / 0.1);
+  box-shadow: var(--shadow-card);
 }
 
 .glass-panel-glow {
-  background: rgba(13, 19, 34, 0.85);
+  background: rgb(var(--c-card) / 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  border: 1px solid rgba(16, 185, 129, 0.3);
   box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.15);
 }
 
-html.light .glass-panel-glow {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  box-shadow: 0 10px 30px -5px rgba(16, 185, 129, 0.12);
+/* Utilidades de seguridad para áreas táctiles / safe-area */
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
 
-html.oled .glass-panel-glow {
-  background: #000000;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  box-shadow: 0 0 20px -2px rgba(16, 185, 129, 0.2);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

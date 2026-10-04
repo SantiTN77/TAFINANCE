@@ -89,5 +89,73 @@ export async function verifySessionToken(token: string | undefined | null): Prom
 }
 
 export function getMasterPin(): string {
-  return process.env.TAFINANCE_PIN || "7777";
+  const pin = process.env.TAFINANCE_PIN;
+  if (!pin && process.env.NODE_ENV === "production") {
+    console.warn("[TAF][auth] TAFINANCE_PIN no está definido en producción: se usa el PIN por defecto. Defínelo en Vercel.");
+  }
+  return pin || "7777";
+}
+
+/* ------------------------------------------------------------------ */
+/* Tokens firmados genéricos (cookies de dispositivo / desafíos)        */
+/* ------------------------------------------------------------------ */
+
+export async function signPayload(payload: Record<string, unknown>, ttlMs: number): Promise<string> {
+  const secret = process.env.TAFINANCE_SECRET || DEFAULT_SECRET;
+  const body = base64UrlEncode(new TextEncoder().encode(JSON.stringify({ ...payload, exp: Date.now() + ttlMs })));
+  const key = await getCryptoKey(secret);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  return `${body}.${base64UrlEncode(sig)}`;
+}
+
+export async function verifyPayload<T = Record<string, any>>(token: string | undefined | null): Promise<T | null> {
+  if (!token || !token.includes(".")) return null;
+  try {
+    const [body, sig] = token.split(".");
+    const key = await getCryptoKey(process.env.TAFINANCE_SECRET || DEFAULT_SECRET);
+    const ok = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      base64UrlDecode(sig) as unknown as BufferSource,
+      new TextEncoder().encode(body)
+    );
+    if (!ok) return null;
+    const data = JSON.parse(new TextDecoder().decode(base64UrlDecode(body)));
+    if (!data.exp || Date.now() > data.exp) return null;
+    return data as T;
+  } catch {
+    return null;
+  }
+}
+
+export { base64UrlEncode, base64UrlDecode };
+
+/* ------------------------------------------------------------------ */
+/* Limitador de intentos de PIN (por IP, en memoria del servidor)       */
+/* ------------------------------------------------------------------ */
+
+const attempts = new Map<string, { fails: number; lockedUntil: number }>();
+const MAX_FAILS = 5;
+const LOCK_MS = 60_000;
+
+export function checkPinThrottle(ip: string): { allowed: boolean; retryAfterSec: number } {
+  const rec = attempts.get(ip);
+  if (rec && rec.lockedUntil > Date.now()) {
+    return { allowed: false, retryAfterSec: Math.ceil((rec.lockedUntil - Date.now()) / 1000) };
+  }
+  return { allowed: true, retryAfterSec: 0 };
+}
+
+export function recordPinResult(ip: string, success: boolean) {
+  if (success) {
+    attempts.delete(ip);
+    return;
+  }
+  const rec = attempts.get(ip) || { fails: 0, lockedUntil: 0 };
+  rec.fails += 1;
+  if (rec.fails >= MAX_FAILS) {
+    rec.lockedUntil = Date.now() + LOCK_MS * Math.min(10, rec.fails - MAX_FAILS + 1);
+  }
+  attempts.set(ip, rec);
+  if (attempts.size > 500) attempts.clear();
 }

@@ -36,7 +36,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       const savedLang = localStorage.getItem("tafinance_lang") as Language | null;
-      if (savedLang) setLanguageState(savedLang);
+      if (savedLang) {
+        setLanguageState(savedLang);
+        document.documentElement.lang = savedLang;
+      }
 
       const savedCurrency = localStorage.getItem("tafinance_currency") as CurrencyCode | null;
       if (savedCurrency) setCurrencyState(savedCurrency);
@@ -49,6 +52,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
     root.classList.remove("dark", "light", "oled");
+    const bg = t === "light" ? "#f1f5f9" : t === "oled" ? "#000000" : "#070A11";
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", bg));
 
     if (t === "light") {
       root.classList.add("light");
@@ -69,6 +74,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = (l: Language) => {
     setLanguageState(l);
+    if (typeof document !== "undefined") document.documentElement.lang = l;
     try {
       localStorage.setItem("tafinance_lang", l);
     } catch {}

@@ -10,6 +10,9 @@ const PUBLIC_PATHS = [
   "/icon-192.svg",
   "/icon-512.svg",
   "/favicon.ico",
+  "/sw.js",
+  "/offline.html",
+  "/api/push/cron", // autenticado con CRON_SECRET en la propia ruta
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/biometric",

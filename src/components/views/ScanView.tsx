@@ -16,6 +16,7 @@ import {
 import { Pocket } from "@/types/finance";
 import { useApp } from "@/lib/context/AppContext";
 import { financeStore } from "@/lib/storage/finance-store";
+import { matchCategory, todayStr } from "@/lib/finance/calc";
 
 interface ScanItem {
   id: string;
@@ -85,7 +86,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
 
       const data = await response.json();
       setMerchant(data.merchant || "Comercio no detectado");
-      setDate(data.date || new Date().toISOString().split("T")[0]);
+      setDate(data.date || todayStr());
       setTotal(Number(data.total) || 0);
       setCategory(data.category || "Alimentación");
 
@@ -123,10 +124,8 @@ export const ScanView: React.FC<ScanViewProps> = ({
     try {
       const categories = await financeStore.getCategories();
       const accounts = await financeStore.getAccounts();
-      const matchedCat =
-        categories.find((c) => c.name.toLowerCase() === category.toLowerCase()) ||
-        categories[0];
-      const matchedAcc = accounts[0];
+      const matchedCat = matchCategory(categories, category, "EXPENSE", `${merchant} ${items.map((i) => i.name).join(" ")}`);
+      const matchedAcc = accounts.find((a) => a.type !== "credit") || accounts[0];
 
       // Add expense transaction
       await financeStore.addTransaction({
@@ -137,7 +136,6 @@ export const ScanView: React.FC<ScanViewProps> = ({
         currency: "COP",
         description: `Factura: ${merchant} (${items.length} ítems)`,
         merchant,
-        receipt_url: imagePreview || undefined,
         raw_prompt: `Escaneo OCR: ${items.length} ítems en ${merchant}`,
         date,
       });
@@ -177,7 +175,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
   return (
     <div className="flex flex-col gap-5 pb-24">
       {/* Mode Switcher */}
-      <div className="grid grid-cols-2 p-1 bg-[#141923] rounded-full border border-white/[0.06] text-xs font-semibold">
+      <div className="grid grid-cols-2 p-1 bg-card rounded-full border border-white/[0.06] text-xs font-semibold">
         <button
           onClick={() => {
             setScanMode("camera");
@@ -186,7 +184,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
           }}
           className={`py-2 rounded-full flex items-center justify-center gap-1.5 transition-all ${
             scanMode === "camera"
-              ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md"
+              ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-on-accent shadow-md"
               : "text-slate-400 hover:text-white"
           }`}
         >
@@ -202,7 +200,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
           }}
           className={`py-2 rounded-full flex items-center justify-center gap-1.5 transition-all ${
             scanMode === "upload"
-              ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md"
+              ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-on-accent shadow-md"
               : "text-slate-400 hover:text-white"
           }`}
         >
@@ -223,7 +221,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
       {!imagePreview ? (
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="relative w-full h-72 rounded-2xl overflow-hidden bg-[#0d1322] border-2 border-dashed border-slate-700/60 hover:border-emerald-500/50 p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors group"
+          className="relative w-full h-72 rounded-2xl overflow-hidden bg-card border-2 border-dashed border-slate-700/60 hover:border-emerald-500/50 p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors group"
         >
           <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
             <Camera className="w-8 h-8 text-emerald-400" />
@@ -242,7 +240,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
         </div>
       ) : (
         /* Image Preview with Laser Scanning Beam */
-        <div className="relative w-full rounded-2xl overflow-hidden bg-[#0a0e16] border border-white/[0.08] shadow-2xl flex flex-col items-center">
+        <div className="relative w-full rounded-2xl overflow-hidden bg-inset border border-white/[0.08] shadow-2xl flex flex-col items-center">
           <div className="relative w-full h-64 bg-black/60 flex items-center justify-center overflow-hidden">
             <img
               src={imagePreview}
@@ -287,7 +285,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
       {merchant && !isScanning && (
         <div className="flex flex-col gap-4">
           {/* Header Card */}
-          <div className="p-4 rounded-2xl bg-[#141923] border border-white/[0.06] shadow-xl flex items-center justify-between">
+          <div className="p-4 rounded-2xl bg-card border border-white/[0.06] shadow-xl flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
                 <Building2 className="w-5 h-5 text-emerald-400" />
@@ -326,7 +324,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
                 {items.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3 rounded-xl bg-[#141923] border border-white/[0.04] flex flex-col gap-2"
+                    className="p-3 rounded-xl bg-card border border-white/[0.04] flex flex-col gap-2"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-white truncate max-w-[200px]">
@@ -348,14 +346,14 @@ export const ScanView: React.FC<ScanViewProps> = ({
                           }
                           className="bg-transparent text-xs font-semibold text-slate-300 focus:outline-none cursor-pointer border-b border-dashed border-white/20 pb-0.5"
                         >
-                          <option value="General" className="bg-[#181c24]">
+                          <option value="General" className="bg-card">
                             General / Sin bolsillo
                           </option>
                           {pockets.map((p) => (
                             <option
                               key={p.id}
                               value={p.name}
-                              className="bg-[#181c24]"
+                              className="bg-card"
                             >
                               Bolsillo: {p.name}
                             </option>
@@ -380,7 +378,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
             className={`w-full py-3.5 px-6 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-xl transition-all ${
               isConfirmed
                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                : "bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:opacity-95 shadow-emerald-500/20"
+                : "bg-gradient-to-r from-emerald-500 to-teal-500 text-on-accent hover:opacity-95 shadow-emerald-500/20"
             }`}
           >
             {isConfirmed ? (

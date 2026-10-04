@@ -1,117 +1,88 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/header/Header";
 import { BottomNav, NavTab } from "@/components/navigation/BottomNav";
 import { BalanceOverview } from "@/components/dashboard/BalanceOverview";
 import { SmartForecastCard } from "@/components/dashboard/SmartForecastCard";
 import { TransactionList } from "@/components/dashboard/TransactionList";
 import { MonthlyTrendChart } from "@/components/dashboard/MonthlyTrendChart";
+import { CategoryBreakdownChart } from "@/components/dashboard/CategoryBreakdownChart";
+import { MonthSummaryCard } from "@/components/dashboard/MonthSummaryCard";
+import { UpcomingPaymentsCard } from "@/components/dashboard/UpcomingPaymentsCard";
 import { PocketsView } from "@/components/views/PocketsView";
+import { AccountsView } from "@/components/views/AccountsView";
 import { CopilotView } from "@/components/views/CopilotView";
 import { ScanView } from "@/components/views/ScanView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { VoiceModal } from "@/components/voice/VoiceModal";
 import { NewTransactionModal } from "@/components/dashboard/NewTransactionModal";
 import { financeStore } from "@/lib/storage/finance-store";
-import { FinancialSummary, Transaction, Category, Account, Pocket } from "@/types/finance";
+import { Pocket } from "@/types/finance";
 import { useApp } from "@/lib/context/AppContext";
+import { useFinance } from "@/hooks/useFinance";
+import { monthKey } from "@/lib/finance/calc";
+import { logger } from "@/lib/debug/logger";
 
-export default function AppPage() {
-  const { t, formatMoney } = useApp();
+type PocketsTab = "pockets" | "accounts";
+
+function AppContent() {
+  const params = useSearchParams();
+  const { language } = useApp();
 
   const [activeTab, setActiveTab] = useState<NavTab>("dashboard");
+  const [pocketsTab, setPocketsTab] = useState<PocketsTab>("pockets");
+  const [month, setMonth] = useState(monthKey());
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const [summary, setSummary] = useState<FinancialSummary | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [pockets, setPockets] = useState<Pocket[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Datos en tiempo real: se recalculan solos con cada cambio del store
+  const { summary, transactions, categories, accounts, pockets, upcoming, syncState, pending, hydrated } = useFinance(month);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3500);
-  };
-
-  const refreshData = useCallback(async () => {
-    try {
-      const [sum, txs, cats, accs, pocks] = await Promise.all([
-        financeStore.getSummary(),
-        financeStore.getTransactions(),
-        financeStore.getCategories(),
-        financeStore.getAccounts(),
-        financeStore.getPockets(),
-      ]);
-      setSummary(sum);
-      setTransactions(txs);
-      setCategories(cats);
-      setAccounts(accs);
-      setPockets(pocks);
-    } catch (err) {
-      console.error("Error cargando datos de la bóveda:", err);
-    } finally {
-      setIsLoading(false);
-    }
+    setTimeout(() => setToastMessage(null), 3500);
   }, []);
 
+  // Accesos directos del PWA: /app?action=voice | add
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
+    const action = params.get("action");
+    if (action === "voice") setIsVoiceOpen(true);
+    if (action === "add") setIsAddOpen(true);
+  }, [params]);
 
-  // Pocket Actions
-  const handleAddPocket = async (pocketData: Omit<Pocket, "id" | "created_at">) => {
-    await financeStore.createPocket(pocketData);
-    await refreshData();
+  useEffect(() => {
+    logger.info("app", "Bóveda abierta", { tx: transactions.length, accounts: accounts.length });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleAddPocket = async (data: Omit<Pocket, "id" | "created_at">) => {
+    await financeStore.createPocket(data);
   };
-
   const handleDeletePocket = async (id: string) => {
     await financeStore.deletePocket(id);
-    await refreshData();
   };
-
   const handleTransferToPocket = async (pocketId: string, amount: number) => {
-    const success = await financeStore.transferToPocket(pocketId, amount);
-    if (success) {
-      await refreshData();
-    }
-    return success;
+    return financeStore.transferToPocket(pocketId, amount);
   };
-
-  // Transaction Actions
   const handleDeleteTransaction = async (id: string) => {
     await financeStore.deleteTransaction(id);
-    showToast("Transacción eliminada de la bóveda");
-    await refreshData();
+    showToast("Movimiento eliminado");
   };
 
-  // Reset all data
-  const handleClearAllData = async () => {
-    await financeStore.clearAllData();
-    await refreshData();
-  };
-
-  // Export JSON backup
-  const handleExportBackup = async () => {
-    const data = await financeStore.exportBackup();
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
+  const handleExportBackup = () => {
+    const blob = new Blob([JSON.stringify(financeStore.exportBackup(), null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `tafinance-backup-${new Date().toISOString().split("T")[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast("Copia de seguridad descargada exitosamente");
+    showToast("Copia de seguridad descargada");
   };
 
-  // Lock vault session
   const handleLockSession = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -119,128 +90,180 @@ export default function AppPage() {
     window.location.href = "/lock";
   };
 
+  const monthLabel = (() => {
+    const [y, m] = month.split("-").map(Number);
+    const s = new Date(y, m - 1, 1).toLocaleDateString(language === "es" ? "es-CO" : "en-US", { month: "long", year: "numeric" });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })();
+
+  const pendingCommitments = upcoming
+    .filter((i) => i.kind === "recurring" && i.type === "EXPENSE" && i.dueDate.startsWith(monthKey()))
+    .reduce((s, i) => s + (i.amount || 0), 0);
+
+  const narrow = "max-w-2xl mx-auto w-full";
+
   return (
-    <div className="min-h-screen bg-[#070A11] text-slate-100 flex flex-col pb-28 selection:bg-emerald-500/30 selection:text-emerald-300">
-      {/* Toast Notification */}
+    <div className="min-h-screen bg-app text-white flex flex-col pb-32 selection:bg-emerald-500/30">
       {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-emerald-500/90 text-slate-950 font-bold text-xs shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top duration-200">
+        <div
+          role="status"
+          className="fixed top-[max(1rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[70] max-w-[92vw] px-4 py-2 rounded-2xl bg-emerald-500 text-slate-950 font-bold text-xs shadow-2xl"
+        >
           {toastMessage}
         </div>
       )}
 
-      {/* Top Header */}
-      <Header onOpenVoice={() => setIsVoiceOpen(true)} />
+      <Header onOpenVoice={() => setIsVoiceOpen(true)} syncState={syncState} pending={pending} onLock={handleLockSession} />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 flex flex-col gap-4">
-        {isLoading ? (
+      <main className="flex-1 max-w-md md:max-w-3xl lg:max-w-5xl mx-auto w-full px-4 pt-4 flex flex-col gap-4">
+        {!hydrated ? (
           <div className="flex flex-col items-center justify-center py-24">
             <div className="w-10 h-10 rounded-full border-2 border-emerald-500/20 border-t-emerald-400 animate-spin mb-3" />
-            <p className="text-xs text-slate-400">
-              Conectando con la Bóveda Privada...
-            </p>
+            <p className="text-xs text-slate-400">Sincronizando tu bóveda…</p>
           </div>
         ) : (
           <>
-            {/* TAB: DASHBOARD */}
             {activeTab === "dashboard" && (
-              <div className="flex flex-col gap-4">
-                <BalanceOverview
-                  summary={summary}
-                  onOpenVoice={() => setIsVoiceOpen(true)}
-                  onOpenScan={() => setActiveTab("scan")}
-                  onOpenAdd={() => setIsAddOpen(true)}
-                />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                <div className="flex flex-col gap-4 min-w-0">
+                  <BalanceOverview
+                    summary={summary}
+                    monthLabel={monthLabel}
+                    onOpenVoice={() => setIsVoiceOpen(true)}
+                    onOpenScan={() => setActiveTab("scan")}
+                    onOpenAdd={() => setIsAddOpen(true)}
+                  />
+                  <UpcomingPaymentsCard
+                    items={upcoming}
+                    onShowToast={showToast}
+                    onOpenCards={() => {
+                      setPocketsTab("accounts");
+                      setActiveTab("pockets");
+                    }}
+                  />
+                  <SmartForecastCard
+                    currentBalance={summary.totalBalance}
+                    monthlyExpenses={summary.monthlyExpenses}
+                    pendingCommitments={pendingCommitments}
+                  />
+                </div>
 
-                {/* 30-Day Smart Cashflow Forecast */}
-                <SmartForecastCard
-                  currentBalance={summary?.totalBalance ?? 0}
-                  monthlyExpenses={summary?.monthlyExpenses ?? 0}
-                  monthlyIncome={summary?.monthlyIncome ?? 0}
-                  onShowToast={showToast}
-                />
+                <div className="flex flex-col gap-4 min-w-0">
+                  <MonthlyTrendChart totalBalance={summary.totalBalance} transactions={transactions} />
+                  <MonthSummaryCard
+                    summary={summary}
+                    month={month}
+                    onMonthChange={setMonth}
+                    pockets={pockets}
+                    categories={categories}
+                    onShowToast={showToast}
+                  />
+                  <CategoryBreakdownChart categories={summary.categoryBreakdown} />
+                </div>
 
-                {/* Trend Chart if user has transactions */}
-                {summary && summary.netWorthHistory.length > 1 && (
-                  <MonthlyTrendChart history={summary.netWorthHistory} />
+                <div className="lg:col-span-2 min-w-0">
+                  <TransactionList
+                    transactions={transactions}
+                    categories={categories}
+                    accounts={accounts}
+                    onDeleteTransaction={handleDeleteTransaction}
+                  />
+                </div>
+              </div>
+            )}
+
+            {activeTab === "pockets" && (
+              <div className={`${narrow} flex flex-col gap-4`}>
+                <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-card border border-white/[0.06]">
+                  {([
+                    ["pockets", "Bolsillos"],
+                    ["accounts", "Cuentas y tarjetas"],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      onClick={() => setPocketsTab(id)}
+                      className={`py-2.5 rounded-xl text-xs font-bold transition-colors ${
+                        pocketsTab === id ? "bg-indigo-500 text-on-accent shadow" : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {pocketsTab === "pockets" ? (
+                  <PocketsView
+                    pockets={pockets}
+                    onAddPocket={handleAddPocket}
+                    onDeletePocket={handleDeletePocket}
+                    onTransferToPocket={handleTransferToPocket}
+                    onShowToast={showToast}
+                  />
+                ) : (
+                  <AccountsView accounts={accounts} transactions={transactions} onShowToast={showToast} />
                 )}
+              </div>
+            )}
 
-                {/* Transaction Ledger */}
-                <TransactionList
-                  transactions={transactions}
-                  categories={categories}
-                  onDeleteTransaction={handleDeleteTransaction}
+            {activeTab === "copilot" && (
+              <div className={narrow}>
+                <CopilotView
+                  pockets={pockets}
+                  totalBalance={summary.totalBalance}
+                  onTransferToPocket={handleTransferToPocket}
+                  onShowToast={showToast}
+                  onTransactionSaved={() => {}}
                 />
               </div>
             )}
 
-            {/* TAB: POCKETS */}
-            {activeTab === "pockets" && (
-              <PocketsView
-                pockets={pockets}
-                onAddPocket={handleAddPocket}
-                onDeletePocket={handleDeletePocket}
-                onTransferToPocket={handleTransferToPocket}
-                onShowToast={showToast}
-              />
-            )}
-
-            {/* TAB: COPILOT IA */}
-            {activeTab === "copilot" && (
-              <CopilotView
-                pockets={pockets}
-                totalBalance={summary?.totalBalance ?? 0}
-                onTransferToPocket={handleTransferToPocket}
-                onShowToast={showToast}
-                onTransactionSaved={refreshData}
-              />
-            )}
-
-            {/* TAB: SCAN OCR */}
             {activeTab === "scan" && (
-              <ScanView
-                pockets={pockets}
-                onReceiptProcessed={refreshData}
-                onShowToast={showToast}
-              />
+              <div className={narrow}>
+                <ScanView pockets={pockets} onReceiptProcessed={() => {}} onShowToast={showToast} />
+              </div>
             )}
 
-            {/* TAB: SETTINGS */}
             {activeTab === "settings" && (
-              <SettingsView
-                onClearAllData={handleClearAllData}
-                onExportBackup={handleExportBackup}
-                onLockSession={handleLockSession}
-                onShowToast={showToast}
-              />
+              <div className={narrow}>
+                <SettingsView
+                  onClearAllData={async () => {
+                    await financeStore.clearAllData();
+                  }}
+                  onExportBackup={handleExportBackup}
+                  onLockSession={handleLockSession}
+                  onShowToast={showToast}
+                  syncState={syncState}
+                  pending={pending}
+                />
+              </div>
             )}
           </>
         )}
       </main>
 
-      {/* Floating Bottom Navigation */}
-      <BottomNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onQuickAdd={() => setIsAddOpen(true)}
-      />
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} onQuickAdd={() => setIsAddOpen(true)} />
 
-      {/* Global Voice Assistant Modal */}
       <VoiceModal
         isOpen={isVoiceOpen}
         onClose={() => setIsVoiceOpen(false)}
-        onTransactionSaved={refreshData}
+        onTransactionSaved={() => showToast("Movimiento registrado")}
       />
 
-      {/* Global Quick Add Transaction Modal */}
       <NewTransactionModal
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         categories={categories}
         accounts={accounts}
         pockets={pockets}
-        onTransactionSaved={refreshData}
+        onTransactionSaved={() => showToast("Movimiento registrado")}
       />
     </div>
+  );
+}
+
+export default function AppPage() {
+  return (
+    <Suspense fallback={null}>
+      <AppContent />
+    </Suspense>
   );
 }
