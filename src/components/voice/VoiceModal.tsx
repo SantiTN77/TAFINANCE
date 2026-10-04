@@ -8,7 +8,7 @@ import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
 import { useFinance } from "@/hooks/useFinance";
 import { ParsedVoiceTransaction } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
-import { matchCategory, todayStr } from "@/lib/finance/calc";
+import { matchCategory, parseAmount, todayStr } from "@/lib/finance/calc";
 import { logger } from "@/lib/debug/logger";
 
 interface VoiceModalProps {
@@ -67,7 +67,7 @@ export function VoiceModal({ isOpen, onClose, onTransactionSaved }: VoiceModalPr
   }, [isOpen]);
 
   const handleSave = async (result: ParsedVoiceTransaction) => {
-    const numeric = parseFloat(amount.replace(/[^0-9.]/g, ""));
+    const numeric = parseAmount(amount);
     if (!numeric || numeric <= 0) return;
     setIsSaving(true);
     try {

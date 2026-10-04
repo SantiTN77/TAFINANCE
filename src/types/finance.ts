@@ -1,4 +1,9 @@
-export type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER";
+/**
+ * ADJUSTMENT: corrección de saldo (saldo inicial, "Ajustar saldo"). Cambia el saldo de la cuenta
+ * pero NO cuenta como ingreso ni gasto del mes. Monto siempre positivo:
+ * entra a `to_account_id` si viene; si no, sale de `account_id`.
+ */
+export type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER" | "ADJUSTMENT";
 
 export interface Account {
   id: string;

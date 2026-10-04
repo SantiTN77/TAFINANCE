@@ -88,33 +88,126 @@ export function lastOccurrenceOnOrBefore(from: Date, day: number): Date {
 /* Saldos derivados de las transacciones (fuente única de verdad)       */
 /* ------------------------------------------------------------------ */
 
-export function computeBalances(accounts: Account[], txs: Transaction[]): Account[] {
-  const map = new Map<string, number>();
-  accounts.forEach((a) => map.set(a.id, 0));
-  const fallback = accounts[0]?.id;
+/** Descripciones que usaban versiones anteriores para los ajustes (antes eran INCOME/EXPENSE). */
+const LEGACY_ADJUSTMENT_DESCRIPTIONS = new Set(["Ajuste de saldo", "Saldo inicial"]);
 
-  const apply = (id: string | undefined | null, delta: number) => {
-    const key = id && map.has(id) ? id : fallback;
-    if (!key) return;
-    map.set(key, (map.get(key) || 0) + delta);
-  };
-
-  for (const t of txs) {
-    const amt = Number(t.amount) || 0;
-    if (t.type === "INCOME") apply(t.account_id, amt);
-    else if (t.type === "EXPENSE") apply(t.account_id, -amt);
-    else if (t.type === "TRANSFER") {
-      apply(t.account_id, -amt);
-      if (t.to_account_id) apply(t.to_account_id, amt);
-    }
-  }
-  return accounts.map((a) => ({ ...a, balance: Math.round((map.get(a.id) || 0) * 100) / 100 }));
+/**
+ * Un ajuste corrige el saldo de una cuenta pero no es un ingreso ni un gasto real.
+ * Incluye los ajustes antiguos guardados como INCOME/EXPENSE sin categoría.
+ */
+export function isAdjustment(t: Transaction): boolean {
+  if (t.type === "ADJUSTMENT") return true;
+  return (
+    (t.type === "INCOME" || t.type === "EXPENSE") &&
+    !t.category_id &&
+    LEGACY_ADJUSTMENT_DESCRIPTIONS.has(t.description)
+  );
 }
 
-/** Efecto neto de una transacción sobre el patrimonio (las transferencias son internas). */
+/** Ingreso o gasto real (excluye ajustes y transferencias): lo que cuentan resumen, categorías y presupuestos. */
+export const isRealIncome = (t: Transaction) => t.type === "INCOME" && !isAdjustment(t);
+export const isRealExpense = (t: Transaction) => t.type === "EXPENSE" && !isAdjustment(t);
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Orden cronológico estable (fecha, luego creación). */
+function chronological(txs: Transaction[]): Transaction[] {
+  return [...txs].sort((a, b) =>
+    a.date === b.date ? (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0) : a.date < b.date ? -1 : 1
+  );
+}
+
+export interface Ledger {
+  accounts: Account[];
+  pockets: Pocket[];
+}
+
+/**
+ * Saldos de cuentas Y bolsillos derivados del historial, con reglas únicas:
+ * - INCOME / EXPENSE: suman / restan a `account_id`.
+ * - EXPENSE con bolsillo existente: el bolsillo paga hasta su saldo; el resto sale de la cuenta.
+ * - TRANSFER entre cuentas: `account_id` → `to_account_id`.
+ * - TRANSFER con bolsillo: cuenta → bolsillo (aporte) o bolsillo → `to_account_id` (retiro).
+ * - TRANSFER huérfana (bolsillo borrado, sin destino): no mueve dinero; así borrar un bolsillo
+ *   devuelve su saldo a la cuenta de origen en vez de hacerlo desaparecer.
+ * - ADJUSTMENT: entra a `to_account_id` o sale de `account_id`.
+ */
+export function computeLedger(accounts: Account[], txs: Transaction[], pockets: Pocket[] = []): Ledger {
+  const acc = new Map<string, number>();
+  accounts.forEach((a) => acc.set(a.id, 0));
+  const pk = new Map<string, number>();
+  pockets.forEach((p) => pk.set(p.id, 0));
+  const fallback = accounts.find((a) => a.type !== "credit")?.id ?? accounts[0]?.id;
+
+  const apply = (id: string | undefined | null, delta: number) => {
+    const key = id && acc.has(id) ? id : fallback;
+    if (!key) return;
+    acc.set(key, (acc.get(key) || 0) + delta);
+  };
+  const pocketOf = (t: Transaction) => (t.pocket_id && pk.has(t.pocket_id) ? t.pocket_id : null);
+
+  for (const t of chronological(txs)) {
+    const amt = Number(t.amount) || 0;
+    if (amt <= 0) continue;
+    const pocket = pocketOf(t);
+    switch (t.type) {
+      case "INCOME":
+        apply(t.account_id, amt);
+        break;
+      case "EXPENSE": {
+        if (pocket && !isAdjustment(t)) {
+          const covered = Math.min(amt, Math.max(0, pk.get(pocket) || 0));
+          pk.set(pocket, (pk.get(pocket) || 0) - covered);
+          if (amt - covered > 0) apply(t.account_id, -(amt - covered));
+        } else {
+          apply(t.account_id, -amt);
+        }
+        break;
+      }
+      case "TRANSFER":
+        if (t.pocket_id) {
+          if (!pocket) break; // bolsillo borrado: el aporte vuelve a la cuenta
+          if (t.to_account_id) {
+            pk.set(pocket, (pk.get(pocket) || 0) - amt);
+            apply(t.to_account_id, amt);
+          } else {
+            apply(t.account_id, -amt);
+            pk.set(pocket, (pk.get(pocket) || 0) + amt);
+          }
+        } else if (t.to_account_id) {
+          apply(t.account_id, -amt);
+          apply(t.to_account_id, amt);
+        }
+        break;
+      case "ADJUSTMENT":
+        if (t.to_account_id) apply(t.to_account_id, amt);
+        else apply(t.account_id, -amt);
+        break;
+    }
+  }
+  return {
+    accounts: accounts.map((a) => ({ ...a, balance: round2(acc.get(a.id) || 0) })),
+    pockets: pockets.map((p) => ({ ...p, current_amount: round2(pk.get(p.id) || 0) })),
+  };
+}
+
+export function computeBalances(accounts: Account[], txs: Transaction[], pockets: Pocket[] = []): Account[] {
+  return computeLedger(accounts, txs, pockets).accounts;
+}
+
+/** Efecto neto de una transacción sobre el patrimonio (transferencias = internas; ajustes sí cuentan). */
 function netWorthEffect(t: Transaction): number {
   const amt = Number(t.amount) || 0;
-  return t.type === "INCOME" ? amt : t.type === "EXPENSE" ? -amt : 0;
+  switch (t.type) {
+    case "INCOME":
+      return amt;
+    case "EXPENSE":
+      return -amt;
+    case "ADJUSTMENT":
+      return t.to_account_id ? amt : -amt;
+    default:
+      return 0;
+  }
 }
 
 export function netWorth(accounts: Account[], pockets: Pocket[]): number {
@@ -122,6 +215,53 @@ export function netWorth(accounts: Account[], pockets: Pocket[]): number {
     accounts.reduce((s, a) => s + Number(a.balance), 0) +
     pockets.reduce((s, p) => s + Number(p.current_amount || 0), 0)
   );
+}
+
+/**
+ * Convierte texto de monto a número aceptando formato colombiano y anglosajón:
+ * "200.000" → 200000, "1.250.000,50" → 1250000.5, "200,000" → 200000, "$ 35.900" → 35900, "12.5" → 12.5.
+ * Un único separador seguido de exactamente 3 dígitos se trata como separador de miles.
+ */
+export function parseAmount(input: string | number | null | undefined): number {
+  if (typeof input === "number") return Number.isFinite(input) ? input : NaN;
+  if (!input) return NaN;
+  let s = String(input).replace(/[^\d.,-]/g, "");
+  const neg = s.startsWith("-");
+  s = s.replace(/-/g, "");
+  if (!s) return NaN;
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  let normalized: string;
+  if (lastDot !== -1 && lastComma !== -1) {
+    // El separador que aparece último es el decimal
+    const dec = lastDot > lastComma ? "." : ",";
+    const thou = dec === "." ? "," : ".";
+    normalized = s.split(thou).join("").replace(dec, ".");
+  } else if (lastDot !== -1 || lastComma !== -1) {
+    const sep = lastDot !== -1 ? "." : ",";
+    const parts = s.split(sep);
+    const isThousands = parts.length > 2 || parts[parts.length - 1].length === 3;
+    normalized = isThousands ? parts.join("") : parts.join(".");
+  } else {
+    normalized = s;
+  }
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) ? (neg ? -n : n) : NaN;
+}
+
+/**
+ * Totales coherentes entre vistas: patrimonio = disponible + bolsillos − deuda.
+ * El saldo a favor de una tarjeta cuenta como disponible, no como deuda negativa.
+ */
+export function accountTotals(accounts: Account[]): { available: number; debt: number } {
+  let available = 0;
+  let debt = 0;
+  for (const a of accounts) {
+    const b = Number(a.balance) || 0;
+    if (a.type === "credit" && b < 0) debt += -b;
+    else available += b;
+  }
+  return { available: round2(available), debt: round2(debt) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -138,20 +278,11 @@ export function buildSummary(
 ): FinancialSummary {
   const nowTotal = netWorth(accounts, pockets);
   const pocketsTotal = pockets.reduce((s, p) => s + Number(p.current_amount || 0), 0);
-  const creditDebt = accounts
-    .filter((a) => a.type === "credit")
-    .reduce((s, a) => s + Math.max(0, -Number(a.balance)), 0);
-  const availableBalance = accounts
-    .filter((a) => a.type !== "credit")
-    .reduce((s, a) => s + Number(a.balance), 0);
+  const { available: availableBalance, debt: creditDebt } = accountTotals(accounts);
 
   const monthTxs = transactions.filter((t) => t.date.startsWith(targetMonth));
-  const monthlyIncome = monthTxs
-    .filter((t) => t.type === "INCOME")
-    .reduce((s, t) => s + Number(t.amount), 0);
-  const monthlyExpenses = monthTxs
-    .filter((t) => t.type === "EXPENSE")
-    .reduce((s, t) => s + Number(t.amount), 0);
+  const monthlyIncome = monthTxs.filter(isRealIncome).reduce((s, t) => s + Number(t.amount), 0);
+  const monthlyExpenses = monthTxs.filter(isRealExpense).reduce((s, t) => s + Number(t.amount), 0);
   const savingsRate =
     monthlyIncome > 0 ? Math.max(0, ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100) : 0;
 
@@ -166,7 +297,7 @@ export function buildSummary(
 
   const categoryTotals: Record<string, number> = {};
   for (const t of monthTxs) {
-    if (t.type === "EXPENSE") {
+    if (isRealExpense(t)) {
       const key = t.category_id || "__none";
       categoryTotals[key] = (categoryTotals[key] || 0) + Number(t.amount);
     }
@@ -278,7 +409,7 @@ export function cardStatus(card: Account, transactions: Transaction[], now = new
   let unbilled = debt;
 
   const charges = transactions
-    .filter((t) => t.type === "EXPENSE" && t.account_id === card.id)
+    .filter((t) => isRealExpense(t) && t.account_id === card.id)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 
   if (cutoff) {
@@ -379,7 +510,7 @@ export interface UpcomingItem {
 export function upcomingRecurring(transactions: Transaction[], now = new Date()): UpcomingItem[] {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return transactions
-    .filter((t) => t.is_recurring && t.type !== "TRANSFER")
+    .filter((t) => t.is_recurring && (isRealIncome(t) || isRealExpense(t)))
     .map((t) => {
       const next = advanceByInterval(parseDate(t.date), t.recurrence_interval);
       const daysLeft = daysBetween(today, next);

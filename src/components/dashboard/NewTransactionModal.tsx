@@ -5,7 +5,7 @@ import { Check, ArrowDownRight, ArrowUpRight, Repeat, DollarSign, CreditCard } f
 import { Category, Account, Pocket, TransactionType } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
 import { useApp } from "@/lib/context/AppContext";
-import { floatDaysFor, parseDate, todayStr } from "@/lib/finance/calc";
+import { floatDaysFor, parseAmount, parseDate, todayStr } from "@/lib/finance/calc";
 import { Sheet, inputCls, labelCls } from "@/components/ui/Sheet";
 import { logger } from "@/lib/debug/logger";
 
@@ -66,8 +66,8 @@ export function NewTransactionModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount.replace(/[^0-9.]/g, ""));
-    if (!numAmount || !description.trim()) return;
+    const numAmount = parseAmount(amount);
+    if (!(numAmount > 0) || !description.trim()) return;
 
     setIsSaving(true);
     try {
@@ -133,10 +133,9 @@ export function NewTransactionModal({
           <label className={labelCls}>{isEs ? "Monto" : "Amount"}</label>
           <div className="relative">
             <input
-              type="number"
+              type="text"
               inputMode="decimal"
               required
-              min="1"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="45000"
@@ -282,7 +281,7 @@ export function NewTransactionModal({
             ? isEs ? "Guardar recurrente" : "Save recurring"
             : isEs ? "Registrar" : "Save"}
         </button>
-        {amount && <p className="text-center text-[11px] text-slate-400">{formatMoney(parseFloat(amount) || 0)}</p>}
+        {amount && <p className="text-center text-[11px] text-slate-400">{formatMoney(parseAmount(amount) || 0)}</p>}
       </form>
     </Sheet>
   );
