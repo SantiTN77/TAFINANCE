@@ -101,7 +101,7 @@ export function VoiceModal({ isOpen, onClose, onTransactionSaved }: VoiceModalPr
 
   const hint = {
     idle: "Toca el orbe y habla. Ej: «Gasté 45 mil en comida con amigos»",
-    listening: engine === "recorder" ? "Grabando… toca el orbe para terminar" : "Escuchando… di tu gasto o ingreso",
+    listening: engine === "recorder" ? "Grabando… di tu gasto y toca el orbe al terminar" : "Escuchando… di tu gasto o ingreso",
     processing: "Interpretando y categorizando…",
     success: "Revisa los datos y confirma",
     error: errorMsg || "Hubo un problema. Intenta de nuevo.",
