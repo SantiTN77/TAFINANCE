@@ -9,7 +9,8 @@
     "lint": "next lint",
     "mcp": "tsx mcp/server.ts",
     "test": "tsx tests/finance-calc.test.ts && tsx tests/voice-parser.test.ts",
-    "icons": "node scripts/gen-icons.mjs"
+    "icons": "node scripts/gen-icons.mjs",
+    "android:debug": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@google/genai": "^2.3.0",

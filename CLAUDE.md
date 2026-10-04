@@ -15,6 +15,7 @@ App PWA de finanzas personales (Next 15, React 19, Tailwind, Supabase, Gemini, W
 - Voz: `useVoiceAssistant` (Web Speech → plan B: grabación + `/api/voice/transcribe`). Modelos Gemini baratos (`flash-lite` primero) en `gemini-client.ts` y `receipt-ocr.ts`.
 - Tema: tokens CSS en `globals.css` + colores en `tailwind.config.ts` (`bg-app`, `bg-card`, `bg-inset`, `text-white` = tinta del tema, `text-on-accent` = blanco fijo). No uses hex fijos para superficies.
 - Push: `public/sw.js`, `PwaProvider`, `/api/push/*`, cron en `vercel.json`.
+- Android: TWA (Bubblewrap) en `android/`, ver `android/README.md`. `/.well-known/assetlinks.json` sale de `ANDROID_CERT_SHA256`; CI compila el APK debug.
 - Seguridad: `middleware.ts` protege todo salvo rutas públicas; `/api/mcp` exige `MCP_TOKEN`; la biometría se verifica en `/api/auth/biometric*` con cookie firmada.
 
 ## Trampas conocidas
