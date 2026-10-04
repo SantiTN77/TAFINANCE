@@ -7,6 +7,7 @@ import { financeStore } from "@/lib/storage/finance-store";
 import { useApp } from "@/lib/context/AppContext";
 import { floatDaysFor, parseDate, todayStr } from "@/lib/finance/calc";
 import { Sheet, inputCls, labelCls } from "@/components/ui/Sheet";
+import { isEditableType } from "@/lib/finance/tx-edit";
 import { logger } from "@/lib/debug/logger";
 
 interface NewTransactionModalProps {
@@ -50,7 +51,8 @@ export function NewTransactionModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isEdit = !!editing;
-  const isTransfer = editing?.type === "TRANSFER";
+  // Transferencias (y ajustes): solo monto, descripción y fecha; tipo y vínculos fijos
+  const isTransfer = !!editing && !isEditableType(editing.type);
   /** Evita que un formulario nuevo herede los valores del último movimiento editado. */
   const wasEditing = useRef(false);
 

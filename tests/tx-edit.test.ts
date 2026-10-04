@@ -72,6 +72,7 @@ const base: Transaction = {
 check("gasto → ingreso permitido", sanitizeTxUpdates(base, { type: "INCOME" }).patch.type === "INCOME");
 throws("gasto → transferencia rechazado", () => sanitizeTxUpdates(base, { type: "TRANSFER" }));
 throws("transferencia → gasto rechazado", () => sanitizeTxUpdates({ ...base, type: "TRANSFER" }, { type: "EXPENSE" }));
+throws("ajuste (tipo futuro) no cambia de tipo", () => sanitizeTxUpdates({ ...base, type: "ADJUSTMENT" as any }, { type: "INCOME" }));
 throws("monto 0 rechazado", () => sanitizeTxUpdates(base, { amount: 0 }));
 throws("monto negativo rechazado", () => sanitizeTxUpdates(base, { amount: -5 }));
 throws("monto NaN rechazado", () => sanitizeTxUpdates(base, { amount: "abc" }));

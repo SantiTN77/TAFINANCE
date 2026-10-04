@@ -18,6 +18,9 @@ type Clearable = (typeof CLEARABLE)[number];
 
 const INTERVALS = ["MONTHLY", "BIWEEKLY", "WEEKLY", "YEARLY"] as const;
 
+/** Gasto e ingreso se pueden intercambiar; transferencias (y ajustes) mantienen su tipo y sus vínculos. */
+export const isEditableType = (t: string): t is "EXPENSE" | "INCOME" => t === "EXPENSE" || t === "INCOME";
+
 export interface TxPatch {
   /** Campos a sobrescribir. */
   patch: Partial<Transaction>;
@@ -46,8 +49,8 @@ export function sanitizeTxUpdates(current: Transaction, updates: Record<string, 
   if (has("type")) {
     const t = updates.type;
     if (t !== "EXPENSE" && t !== "INCOME" && t !== "TRANSFER") throw new TxValidationError("Tipo inválido");
-    if (t !== current.type && (t === "TRANSFER" || current.type === "TRANSFER")) {
-      throw new TxValidationError("Una transferencia no puede convertirse en gasto o ingreso (ni al revés)");
+    if (t !== current.type && (!isEditableType(t) || !isEditableType(current.type))) {
+      throw new TxValidationError("Solo se puede cambiar entre gasto e ingreso (transferencias y ajustes conservan su tipo)");
     }
     patch.type = t;
   }
