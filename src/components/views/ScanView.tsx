@@ -230,7 +230,7 @@ export const ScanView: React.FC<ScanViewProps> = ({
             Captura tu factura o recibo
           </h3>
           <p className="text-xs text-slate-400 max-w-xs">
-            Gemini 3.5 Multimodal extraerá automáticamente el total, desglose por ítems
+            IA multimodal extraerá automáticamente el total, desglose por ítems
             y asignará cada rubro a tus bolsillos correspondientes.
           </p>
           <span className="mt-4 px-3 py-1.5 rounded-full bg-slate-800/80 border border-white/[0.08] text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">

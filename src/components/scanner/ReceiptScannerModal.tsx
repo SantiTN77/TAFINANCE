@@ -178,7 +178,7 @@ export function ReceiptScannerModal({
           {isScanning && (
             <div className="my-3 flex items-center gap-2 text-cyan-400 text-xs font-medium">
               <Sparkles className="w-4 h-4 animate-spin" />
-              <span>Analizando factura con Gemini 3.5 Multimodal...</span>
+              <span>Analizando factura con IA multimodal...</span>
             </div>
           )}
 

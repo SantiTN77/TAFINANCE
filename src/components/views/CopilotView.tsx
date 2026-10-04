@@ -339,7 +339,7 @@ export const CopilotView: React.FC<CopilotViewProps> = ({
           </div>
         </div>
         <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
-          GEMINI 3.8 ONLINE
+          IA EN LÍNEA
         </span>
       </div>
 

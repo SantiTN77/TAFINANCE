@@ -30,7 +30,7 @@ export const translations = {
     },
 
     // Landing Page
-    landingHeroBadge: "Arquitectura Next.js 15 + Gemini 3.8 + WebAuthn",
+    landingHeroBadge: "Arquitectura Next.js 15 + WebAuthn",
     landingHeroTitle: "Tu Bóveda Financiera con Inteligencia Artificial",
     landingHeroSubtitle: "Control de contabilidad personal, bolsillos de ahorro, escáner OCR de facturas y comandos por voz con orbe 3D reactivo. Privado, cifrado y conectado a Google Spark.",
     landingCtaEnter: "Entrar a mi Bóveda",
@@ -189,7 +189,7 @@ export const translations = {
     },
 
     // Landing Page
-    landingHeroBadge: "Next.js 15 + Gemini 3.8 + WebAuthn Architecture",
+    landingHeroBadge: "Next.js 15 + WebAuthn Architecture",
     landingHeroTitle: "Your Personal Financial Vault Powered by AI",
     landingHeroSubtitle: "Personal accounting, smart savings pockets, multimodal OCR receipt scanner, and reactive 3D voice orb. Private, encrypted, and connected to Google Spark.",
     landingCtaEnter: "Enter My Vault",

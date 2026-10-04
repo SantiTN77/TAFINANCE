@@ -7,7 +7,8 @@ export function getGeminiClient(customApiKey?: string): GoogleGenAI | null {
   return new GoogleGenAI({ apiKey });
 }
 
-const MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+// Modelos económicos: primero flash-lite (el más barato), flash solo como respaldo
+const MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash"];
 
 const localToday = () => {
   const d = new Date();
