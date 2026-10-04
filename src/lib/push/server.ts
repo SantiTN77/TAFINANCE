@@ -1,4 +1,3 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { createHash } from "crypto";
 
@@ -23,13 +22,8 @@ export function subscriptionId(endpoint: string): string {
   return createHash("sha256").update(endpoint).digest("hex").slice(0, 32);
 }
 
-/** Cliente de servidor: usa service_role si existe; si no, la clave anónima (política abierta). */
-export function serverDb(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key || !url.startsWith("http")) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
+/** Cliente de servidor con service_role (sin fallback a la clave anónima). */
+export { serverDb } from "@/lib/supabase/server";
 
 let vapidReady = false;
 export function ensureVapid(): boolean {

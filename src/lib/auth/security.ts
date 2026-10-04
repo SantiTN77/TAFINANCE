@@ -1,6 +1,38 @@
 // Web Crypto API HMAC-SHA256 Token generator and validator (Edge-compatible)
 
-const DEFAULT_SECRET = "tafinance-vault-secure-auth-token-2026";
+// Solo para `next dev`: en cualquier otro entorno falta el secreto = nadie entra (falla cerrado).
+const DEV_ONLY_SECRET = "tafinance-dev-only-secret-not-for-production";
+const DEV_ONLY_PIN = "7777";
+const MIN_SECRET_LENGTH = 32;
+const MIN_PIN_LENGTH = 4;
+
+const isDev = () => process.env.NODE_ENV === "development";
+
+/** Secreto HMAC de sesiones y cookies firmadas. Lanza si no está configurado (fuera de dev). */
+export function getAuthSecret(): string {
+  const secret = process.env.TAFINANCE_SECRET?.trim();
+  if (secret && secret.length >= MIN_SECRET_LENGTH) return secret;
+  if (isDev()) return DEV_ONLY_SECRET;
+  throw new Error(`TAFINANCE_SECRET no definido o con menos de ${MIN_SECRET_LENGTH} caracteres`);
+}
+
+/** PIN maestro, o null si no está configurado (fuera de dev): el login queda deshabilitado. */
+export function getMasterPin(): string | null {
+  const pin = process.env.TAFINANCE_PIN?.trim();
+  if (pin && pin.length >= MIN_PIN_LENGTH) return pin;
+  if (isDev()) return DEV_ONLY_PIN;
+  return null;
+}
+
+/** true si el servidor puede emitir sesiones (secreto y PIN válidos). */
+export function isAuthConfigured(): boolean {
+  try {
+    getAuthSecret();
+  } catch {
+    return false;
+  }
+  return getMasterPin() !== null;
+}
 
 async function getCryptoKey(secret: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
@@ -41,7 +73,7 @@ function base64UrlDecode(str: string): Uint8Array {
 export async function createSessionToken(
   daysValid: number = 30
 ): Promise<string> {
-  const secret = process.env.TAFINANCE_SECRET || DEFAULT_SECRET;
+  const secret = getAuthSecret();
   const exp = Date.now() + daysValid * 24 * 60 * 60 * 1000;
   const payload = JSON.stringify({ exp, valid: true });
   const payloadEnc = new TextEncoder().encode(payload);
@@ -62,7 +94,7 @@ export async function verifySessionToken(token: string | undefined | null): Prom
   if (!token || !token.includes(".")) return false;
   try {
     const [payloadB64, sigB64] = token.split(".");
-    const secret = process.env.TAFINANCE_SECRET || DEFAULT_SECRET;
+    const secret = getAuthSecret();
     const key = await getCryptoKey(secret);
 
     const sigBytes = base64UrlDecode(sigB64);
@@ -88,20 +120,12 @@ export async function verifySessionToken(token: string | undefined | null): Prom
   }
 }
 
-export function getMasterPin(): string {
-  const pin = process.env.TAFINANCE_PIN;
-  if (!pin && process.env.NODE_ENV === "production") {
-    console.warn("[TAF][auth] TAFINANCE_PIN no está definido en producción: se usa el PIN por defecto. Defínelo en Vercel.");
-  }
-  return pin || "7777";
-}
-
 /* ------------------------------------------------------------------ */
 /* Tokens firmados genéricos (cookies de dispositivo / desafíos)        */
 /* ------------------------------------------------------------------ */
 
 export async function signPayload(payload: Record<string, unknown>, ttlMs: number): Promise<string> {
-  const secret = process.env.TAFINANCE_SECRET || DEFAULT_SECRET;
+  const secret = getAuthSecret();
   const body = base64UrlEncode(new TextEncoder().encode(JSON.stringify({ ...payload, exp: Date.now() + ttlMs })));
   const key = await getCryptoKey(secret);
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
@@ -112,7 +136,7 @@ export async function verifyPayload<T = Record<string, any>>(token: string | und
   if (!token || !token.includes(".")) return null;
   try {
     const [body, sig] = token.split(".");
-    const key = await getCryptoKey(process.env.TAFINANCE_SECRET || DEFAULT_SECRET);
+    const key = await getCryptoKey(getAuthSecret());
     const ok = await crypto.subtle.verify(
       "HMAC",
       key,
@@ -129,33 +153,3 @@ export async function verifyPayload<T = Record<string, any>>(token: string | und
 }
 
 export { base64UrlEncode, base64UrlDecode };
-
-/* ------------------------------------------------------------------ */
-/* Limitador de intentos de PIN (por IP, en memoria del servidor)       */
-/* ------------------------------------------------------------------ */
-
-const attempts = new Map<string, { fails: number; lockedUntil: number }>();
-const MAX_FAILS = 5;
-const LOCK_MS = 60_000;
-
-export function checkPinThrottle(ip: string): { allowed: boolean; retryAfterSec: number } {
-  const rec = attempts.get(ip);
-  if (rec && rec.lockedUntil > Date.now()) {
-    return { allowed: false, retryAfterSec: Math.ceil((rec.lockedUntil - Date.now()) / 1000) };
-  }
-  return { allowed: true, retryAfterSec: 0 };
-}
-
-export function recordPinResult(ip: string, success: boolean) {
-  if (success) {
-    attempts.delete(ip);
-    return;
-  }
-  const rec = attempts.get(ip) || { fails: 0, lockedUntil: 0 };
-  rec.fails += 1;
-  if (rec.fails >= MAX_FAILS) {
-    rec.lockedUntil = Date.now() + LOCK_MS * Math.min(10, rec.fails - MAX_FAILS + 1);
-  }
-  attempts.set(ip, rec);
-  if (attempts.size > 500) attempts.clear();
-}

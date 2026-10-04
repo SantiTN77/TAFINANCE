@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { financeStore } from "../src/lib/storage/finance-store";
+import { financeStore } from "../src/lib/storage/server-store";
 import { parseVoiceFinancialInput } from "../src/lib/ai/gemini-client";
 
 const server = new Server(

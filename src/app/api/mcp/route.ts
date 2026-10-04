@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { todayStr, monthKey } from "@/lib/finance/calc";
 import { checkMcpAuth } from "@/lib/auth/mcp-auth";
-import { financeStore } from "@/lib/storage/finance-store";
+import { financeStore } from "@/lib/storage/server-store";
 import { parseVoiceFinancialInput } from "@/lib/ai/gemini-client";
 
 // MCP Tools Definition

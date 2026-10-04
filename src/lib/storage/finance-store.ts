@@ -6,7 +6,14 @@ import {
   Pocket,
   Transaction,
 } from "@/types/finance";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  ApplyResult,
+  INVALID_OP_CODE,
+  pick,
+  RemoteOp,
+  RemoteSnapshot,
+  Table,
+} from "@/lib/storage/remote-schema";
 import { buildSummary, computeBalances, monthKey, todayStr } from "@/lib/finance/calc";
 import { logger } from "@/lib/debug/logger";
 
@@ -17,6 +24,8 @@ import { logger } from "@/lib/debug/logger";
  *   suscriptores en cada cambio (gráficas y totales se recalculan al instante).
  * - Los cambios se envían a Supabase mediante una cola (outbox) persistente: si no hay
  *   red, se reintentan al volver la conexión. Nunca se pierden datos por un fallo remoto.
+ * - El navegador NO habla con Supabase: usa /api/data (protegido por la sesión). Solo el
+ *   servidor tiene la clave service_role; la BD rechaza la clave anónima.
  * - Los saldos de las cuentas se DERIVAN de las transacciones (computeBalances), así
  *   nunca quedan desfasados respecto al historial.
  * - En el servidor (API routes / MCP) no hay localStorage: se lee de Supabase, se aplica
@@ -40,14 +49,8 @@ const DEFAULT_ACCOUNTS: Account[] = [
   { id: "acc-savings", name: "Fondo de Ahorros", type: "savings", balance: 0, currency: "COP" },
 ];
 
-type Table = "accounts" | "categories" | "transactions" | "pockets" | "budgets";
-
-interface OutboxOp {
+interface OutboxOp extends RemoteOp {
   id: string;
-  table: Table;
-  op: "upsert" | "delete";
-  row?: Record<string, unknown>;
-  rowId?: string;
   /** Reintentos por violación de integridad (p. ej. el padre aún no llegó). */
   attempts?: number;
 }
@@ -64,25 +67,51 @@ const LS = {
 const uid = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
-/** Columnas que tienen las tablas remotas (evita enviar campos desconocidos). */
-const REMOTE_COLUMNS: Record<Table, string[]> = {
-  accounts: ["id", "name", "type", "balance", "currency", "cutoff_day", "due_day", "annual_yield", "remind_days_before", "created_at"],
-  categories: ["id", "name", "icon", "color", "type"],
-  transactions: [
-    "id", "account_id", "category_id", "pocket_id", "to_account_id", "type", "amount", "currency",
-    "description", "merchant", "receipt_url", "raw_prompt", "is_recurring", "recurrence_interval", "date", "created_at",
-  ],
-  pockets: ["id", "name", "target_amount", "current_amount", "icon", "color", "category", "auto_save_percentage", "created_at"],
-  budgets: ["id", "category_id", "monthly_limit", "month"],
+/** Respuesta del backend cuando la BD remota no está configurada en el servidor. */
+type Disabled = { disabled: true };
+
+export interface RemoteBackend {
+  apply(ops: RemoteOp[]): Promise<ApplyResult | Disabled>;
+  fetch(): Promise<RemoteSnapshot | Disabled>;
+}
+
+/** Navegador: todo pasa por /api/data con la cookie de sesión. */
+const httpBackend: RemoteBackend = {
+  async apply(ops) {
+    const res = await fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ops: ops.map(({ table, op, row, rowId }) => ({ table, op, row, rowId })) }),
+    });
+    return readResponse<ApplyResult>(res);
+  },
+  async fetch() {
+    const res = await fetch("/api/data", { cache: "no-store" });
+    return readResponse<RemoteSnapshot>(res);
+  },
 };
 
-function pick(table: Table, row: Record<string, any>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const k of REMOTE_COLUMNS[table]) {
-    if (row[k] !== undefined) out[k] = row[k];
-  }
-  return out;
+async function readResponse<T>(res: Response): Promise<T | Disabled> {
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 503 && body?.disabled) return { disabled: true };
+  if (!res.ok) throw new Error(body?.error || body?.message || `HTTP ${res.status}`);
+  return body as T;
 }
+
+/**
+ * Servidor sin backend registrado: modo local. Las API routes / MCP deben importar el store
+ * desde "@/lib/storage/server-store", que registra el acceso directo con service_role
+ * (así el cliente de Supabase nunca entra en el bundle del navegador).
+ */
+const noBackend: RemoteBackend = {
+  apply: async () => ({ disabled: true }),
+  fetch: async () => ({ disabled: true }),
+};
+
+const isDisabled = (r: unknown): r is Disabled => !!r && typeof r === "object" && (r as Disabled).disabled === true;
+
+const BATCH_SIZE = 100;
+const POLL_MS = 30_000;
 
 class FinanceStore {
   private categories: Category[] = [...DEFAULT_CATEGORIES];
@@ -100,13 +129,22 @@ class FinanceStore {
   private started = false;
   /** true cuando ya hay datos locales o terminó la primera sincronización. */
   private hydrated = false;
-  private channel: any = null;
-  private realtimeTimer: ReturnType<typeof setTimeout> | null = null;
+  private backend: RemoteBackend = this.isBrowser ? httpBackend : noBackend;
+  /** "unknown" hasta la primera respuesta del servidor; "off" = sin BD remota (modo local). */
+  private remoteMode: "unknown" | "on" | "off" = "unknown";
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
   /** Estado de sincronización visible en la UI. */
   syncState: "idle" | "syncing" | "offline" | "error" | "local" = "idle";
 
   constructor() {
     if (this.isBrowser) this.loadFromLocalStorage();
+  }
+
+  /** Solo servidor: conecta el store a Supabase (ver server-store.ts). */
+  setRemoteBackend(backend: RemoteBackend) {
+    if (this.isBrowser) return;
+    this.backend = backend;
+    this.remoteMode = "unknown";
   }
 
   /* ------------------------------ suscripción ------------------------------ */
@@ -136,11 +174,11 @@ class FinanceStore {
     }
   }
 
-  /** Arranca la sincronización (idempotente): pull inicial, eventos de red y realtime. */
+  /** Arranca la sincronización (idempotente): pull inicial, eventos de red y sondeo periódico. */
   start() {
     if (!this.isBrowser || this.started) return;
     this.started = true;
-    logger.info("store", "Iniciando sincronización", { supabase: isSupabaseConfigured(), pendientes: this.outbox.length });
+    logger.info("store", "Iniciando sincronización", { pendientes: this.outbox.length });
 
     const resync = () => {
       if (document.visibilityState === "visible") void this.sync();
@@ -155,20 +193,10 @@ class FinanceStore {
       }
     });
 
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        this.channel = supabase
-          .channel("tafinance-live")
-          .on("postgres_changes", { event: "*", schema: "public" }, (payload: any) => {
-            logger.debug("realtime", "Cambio remoto", { table: payload.table, type: payload.eventType });
-            if (this.realtimeTimer) clearTimeout(this.realtimeTimer);
-            this.realtimeTimer = setTimeout(() => void this.pull(), 400);
-          })
-          .subscribe((status: string) => logger.debug("realtime", "estado canal", status));
-      } catch (e) {
-        logger.warn("realtime", "No disponible", e);
-      }
-    }
+    // Sin realtime (exigiría exponer la BD al navegador): sondeo ligero con la app visible
+    this.pollTimer = setInterval(() => {
+      if (document.visibilityState === "visible" && this.remoteMode !== "off") void this.pull();
+    }, POLL_MS);
     void this.sync();
   }
 
@@ -243,7 +271,14 @@ class FinanceStore {
   /* ------------------------------ sincronización ------------------------------ */
 
   private get remoteOn(): boolean {
-    return isSupabaseConfigured() && !!supabase;
+    return this.remoteMode !== "off";
+  }
+
+  private markDisabled() {
+    if (this.remoteMode !== "off") logger.info("sync", "BD remota no configurada: modo local");
+    this.remoteMode = "off";
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = null;
   }
 
   /** Envía la cola pendiente a Supabase (en orden). */
@@ -267,45 +302,59 @@ class FinanceStore {
       try {
         // Reintenta sin salir hasta vaciar la cola o fallar
         while (this.outbox.length) {
-          const op = this.outbox[0];
-          const q = supabase!.from(op.table);
-          let error: any = null;
-          if (op.op === "upsert") {
-            ({ error } = await q.upsert(op.row as any));
-          } else {
-            ({ error } = await q.delete().eq("id", op.rowId as string));
-          }
-          if (error) {
-            const integrity = typeof error.code === "string" && error.code.startsWith("23");
-            if (integrity && (op.attempts || 0) < 3) {
-              // El registro padre quizá aún no está en el servidor: reintenta al final de la cola
-              op.attempts = (op.attempts || 0) + 1;
-              this.outbox.push(this.outbox.shift()!);
-              logger.warn("sync", `Integridad en ${op.table}; reintento ${op.attempts}/3`, error.message);
-              if (this.outbox.every((o) => (o.attempts || 0) > 0)) {
-                this.setSync("error");
-                return;
-              }
-              continue;
-            }
-            if (integrity) {
-              // Descarta la operación irrecuperable para no bloquear el resto de la cola
-              logger.error("sync", `Descartada ${op.op} en ${op.table}`, error.message);
-              this.outbox.shift();
-              this.saveToLocalStorage();
-              continue;
-            }
-            logger.error("sync", `Fallo ${op.op} en ${op.table}`, error.message || error);
-            this.setSync("error");
+          const batch = this.outbox.slice(0, BATCH_SIZE);
+          const result = await this.backend.apply(batch);
+          if (isDisabled(result)) {
+            this.markDisabled();
+            this.outbox = [];
+            this.saveToLocalStorage();
+            this.syncState = "local";
+            this.emit();
             return;
           }
-          this.outbox.shift();
+          this.remoteMode = "on";
+          // Saca de la cola lo que ya quedó escrito (en orden)
+          const done = new Set(batch.slice(0, result.applied).map((o) => o.id));
+          this.outbox = this.outbox.filter((o) => !done.has(o.id));
           this.saveToLocalStorage();
+          const error = result.error;
+          if (!error) continue;
+
+          const op = this.outbox[0];
+          if (!op) break;
+          if (error.code === INVALID_OP_CODE) {
+            logger.error("sync", `Descartada ${op.op} inválida en ${op.table}`, error.message);
+            this.outbox.shift();
+            this.saveToLocalStorage();
+            continue;
+          }
+          const integrity = typeof error.code === "string" && error.code.startsWith("23");
+          if (integrity && (op.attempts || 0) < 3) {
+            // El registro padre quizá aún no está en el servidor: reintenta al final de la cola
+            op.attempts = (op.attempts || 0) + 1;
+            this.outbox.push(this.outbox.shift()!);
+            logger.warn("sync", `Integridad en ${op.table}; reintento ${op.attempts}/3`, error.message);
+            if (this.outbox.every((o) => (o.attempts || 0) > 0)) {
+              this.setSync("error");
+              return;
+            }
+            continue;
+          }
+          if (integrity) {
+            // Descarta la operación irrecuperable para no bloquear el resto de la cola
+            logger.error("sync", `Descartada ${op.op} en ${op.table}`, error.message);
+            this.outbox.shift();
+            this.saveToLocalStorage();
+            continue;
+          }
+          logger.error("sync", `Fallo ${op.op} en ${op.table}`, error.message);
+          this.setSync("error");
+          return;
         }
         this.setSync("idle");
         logger.debug("sync", "Cola enviada");
       } catch (e) {
-        logger.warn("sync", "Sin conexión con Supabase", e);
+        logger.warn("sync", "Sin conexión con el servidor de datos", e);
         this.setSync(this.isBrowser && !navigator.onLine ? "offline" : "error");
       }
     })().finally(() => {
@@ -323,18 +372,18 @@ class FinanceStore {
       try {
         if (this.outbox.length) await this.flush();
         if (this.outbox.length) return; // aún hay cambios sin enviar: no pisar el estado local
-        const [acc, cat, tx, pk, bg] = await Promise.all([
-          supabase!.from("accounts").select("*"),
-          supabase!.from("categories").select("*"),
-          supabase!.from("transactions").select("*").order("date", { ascending: false }),
-          supabase!.from("pockets").select("*"),
-          supabase!.from("budgets").select("*"),
-        ]);
-        const firstError = [acc, cat, tx, pk, bg].find((r) => r.error);
-        if (firstError?.error) {
-          logger.warn("sync", "Pull parcial", firstError.error.message);
+        const remote = await this.backend.fetch();
+        if (isDisabled(remote)) {
+          this.markDisabled();
+          this.setSync("local");
           return;
         }
+        this.remoteMode = "on";
+        const acc = { data: remote.accounts as unknown as Account[] };
+        const cat = { data: remote.categories as unknown as Category[] };
+        const tx = { data: remote.transactions as unknown as Transaction[] };
+        const pk = { data: remote.pockets as unknown as Pocket[] };
+        const bg = { data: remote.budgets as unknown as Budget[] };
         if (acc.data?.length) this.accounts = acc.data as Account[];
         else this.outbox.push(...this.accounts.map((a) => this.op("accounts", a)));
         if (cat.data?.length) this.categories = cat.data as Category[];
@@ -352,7 +401,7 @@ class FinanceStore {
         this.recomputeBalances();
         this.saveToLocalStorage();
         this.emit();
-        logger.debug("sync", "Datos actualizados desde Supabase", {
+        logger.debug("sync", "Datos actualizados desde el servidor", {
           tx: this.transactions.length,
           pockets: this.pockets.length,
         });
