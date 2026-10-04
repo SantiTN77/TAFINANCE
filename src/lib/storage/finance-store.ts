@@ -16,6 +16,7 @@ import {
 } from "@/lib/storage/remote-schema";
 import { buildSummary, computeBalances, monthKey, todayStr } from "@/lib/finance/calc";
 import { logger } from "@/lib/debug/logger";
+import { TxValidationError, applyTxPatch, pocketDeltas, sanitizeTxUpdates } from "@/lib/finance/tx-edit";
 
 /**
  * Store financiero local-first.
@@ -640,14 +641,52 @@ class FinanceStore {
     return newTx;
   }
 
-  async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction | null> {
+  /** Devuelve un movimiento por id (null si no existe). */
+  async getTransaction(id: string): Promise<Transaction | null> {
+    await this.ready();
+    return this.transactions.find((t) => t.id === id) || null;
+  }
+
+  /**
+   * Edita un movimiento. Valida los cambios (lanza TxValidationError), recalcula los saldos
+   * derivados y corrige los bolsillos si cambia un aporte (monto o bolsillo destino).
+   */
+  async updateTransaction(id: string, updates: Partial<Transaction> | Record<string, unknown>): Promise<Transaction | null> {
     await this.ready();
     const i = this.transactions.findIndex((t) => t.id === id);
     if (i === -1) return null;
-    this.transactions[i] = { ...this.transactions[i], ...updates };
-    this.commit([this.op("transactions", this.transactions[i])]);
+    const current = this.transactions[i];
+    const { next, remote } = applyTxPatch(current, sanitizeTxUpdates(current, updates as Record<string, unknown>));
+
+    if (next.account_id && !this.accounts.some((a) => a.id === next.account_id)) {
+      throw new TxValidationError("La cuenta no existe");
+    }
+    if (next.to_account_id && !this.accounts.some((a) => a.id === next.to_account_id)) {
+      throw new TxValidationError("La cuenta destino no existe");
+    }
+    if (next.pocket_id && next.pocket_id !== current.pocket_id && !this.pockets.some((p) => p.id === next.pocket_id)) {
+      throw new TxValidationError("El bolsillo no existe");
+    }
+
+    const ops: OutboxOp[] = [this.op("transactions", remote)];
+    ops.push(...this.applyPocketDeltas(pocketDeltas(current, next)));
+    this.transactions[i] = next;
+    this.commit(ops);
+    logger.info("store", "Movimiento editado", { id, campos: Object.keys(updates) });
     await this.settle();
-    return this.transactions[i];
+    return next;
+  }
+
+  /** Ajusta los bolsillos afectados y devuelve las operaciones para Supabase. */
+  private applyPocketDeltas(deltas: Map<string, number>): OutboxOp[] {
+    const ops: OutboxOp[] = [];
+    for (const [pocketId, delta] of deltas) {
+      const pocket = this.pockets.find((p) => p.id === pocketId);
+      if (!pocket) continue;
+      pocket.current_amount = Math.max(0, Math.round((Number(pocket.current_amount) + delta) * 100) / 100);
+      ops.push(this.op("pockets", pocket));
+    }
+    return ops;
   }
 
   /**
@@ -668,16 +707,8 @@ class FinanceStore {
     const i = this.transactions.findIndex((t) => t.id === id);
     if (i === -1) return false;
     const tx = this.transactions[i];
-    const ops: OutboxOp[] = [this.del("transactions", id)];
-
     // Revertir aporte a bolsillo
-    if (tx.type === "TRANSFER" && tx.pocket_id) {
-      const pocket = this.pockets.find((p) => p.id === tx.pocket_id);
-      if (pocket) {
-        pocket.current_amount = Math.max(0, Number(pocket.current_amount) - Number(tx.amount));
-        ops.push(this.op("pockets", pocket));
-      }
-    }
+    const ops: OutboxOp[] = [this.del("transactions", id), ...this.applyPocketDeltas(pocketDeltas(tx, null))];
     this.transactions.splice(i, 1);
     this.commit(ops);
     await this.settle();

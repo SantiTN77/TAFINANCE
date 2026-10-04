@@ -68,6 +68,35 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: "tafinance_update_transaction",
+    description: "Edita un movimiento existente (monto, descripción, fecha, comercio, tipo gasto/ingreso, cuenta o categoría). Los saldos y bolsillos se recalculan solos.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "Id del movimiento (ver tafinance_list_transactions)" },
+        amount: { type: "number", description: "Nuevo monto en COP" },
+        description: { type: "string", description: "Nueva descripción" },
+        merchant: { type: "string", description: "Nuevo comercio (vacío para quitarlo)" },
+        type: { type: "string", enum: ["EXPENSE", "INCOME"], description: "Cambiar entre gasto e ingreso" },
+        date: { type: "string", description: "Nueva fecha YYYY-MM-DD" },
+        account_id: { type: "string", description: "Id de la cuenta o tarjeta" },
+        category_id: { type: "string", description: "Id de la categoría" },
+      },
+    },
+  },
+  {
+    name: "tafinance_delete_transaction",
+    description: "Elimina un movimiento por id. Si era un aporte a un bolsillo, el aporte se revierte.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "Id del movimiento a eliminar" },
+      },
+    },
+  },
+  {
     name: "tafinance_list_pockets",
     description: "Lista todos los bolsillos y metas de ahorro del usuario con montos acumulados y objetivos.",
     inputSchema: {
@@ -233,6 +262,26 @@ async function executeTool(name: string, args: Record<string, unknown> = {}) {
           },
         ],
       };
+    }
+
+    case "tafinance_update_transaction": {
+      const { id, ...updates } = args as { id?: string } & Record<string, unknown>;
+      if (!id) throw new Error("id es requerido");
+      const updated = await financeStore.updateTransaction(String(id), updates);
+      if (!updated) throw new Error(`Movimiento ${id} no encontrado`);
+      return {
+        content: [
+          { type: "text", text: JSON.stringify({ message: "Movimiento actualizado", transaction: updated }, null, 2) },
+        ],
+      };
+    }
+
+    case "tafinance_delete_transaction": {
+      const id = String(args?.id || "");
+      if (!id) throw new Error("id es requerido");
+      const ok = await financeStore.deleteTransaction(id);
+      if (!ok) throw new Error(`Movimiento ${id} no encontrado`);
+      return { content: [{ type: "text", text: JSON.stringify({ message: "Movimiento eliminado", id }, null, 2) }] };
     }
 
     case "tafinance_list_pockets": {

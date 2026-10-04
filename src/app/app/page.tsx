@@ -19,7 +19,7 @@ import { SettingsView } from "@/components/views/SettingsView";
 import { VoiceModal } from "@/components/voice/VoiceModal";
 import { NewTransactionModal } from "@/components/dashboard/NewTransactionModal";
 import { financeStore } from "@/lib/storage/finance-store";
-import { Pocket } from "@/types/finance";
+import { Pocket, Transaction } from "@/types/finance";
 import { useApp } from "@/lib/context/AppContext";
 import { useFinance } from "@/hooks/useFinance";
 import { monthKey } from "@/lib/finance/calc";
@@ -36,6 +36,7 @@ function AppContent() {
   const [month, setMonth] = useState(monthKey());
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Datos en tiempo real: se recalculan solos con cada cambio del store
@@ -167,6 +168,10 @@ function AppContent() {
                     categories={categories}
                     accounts={accounts}
                     onDeleteTransaction={handleDeleteTransaction}
+                    onEditTransaction={(tx) => {
+                      setEditingTx(tx);
+                      setIsAddOpen(true);
+                    }}
                   />
                 </div>
               </div>
@@ -250,11 +255,16 @@ function AppContent() {
 
       <NewTransactionModal
         isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
+        onClose={() => {
+          setIsAddOpen(false);
+          setEditingTx(null);
+        }}
         categories={categories}
         accounts={accounts}
         pockets={pockets}
-        onTransactionSaved={() => showToast("Movimiento registrado")}
+        editing={editingTx}
+        onDelete={handleDeleteTransaction}
+        onTransactionSaved={() => showToast(editingTx ? "Movimiento actualizado" : "Movimiento registrado")}
       />
     </div>
   );
