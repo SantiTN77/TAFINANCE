@@ -10,7 +10,10 @@ App PWA de finanzas personales (Next 15, React 19, Tailwind, Supabase, Gemini, W
 
 ## Arquitectura (lo que no se ve en el código)
 
-- `src/lib/finance/calc.ts`: lógica pura (saldos, resumen, tarjetas, recordatorios). **Los saldos se derivan de las transacciones**; nunca se guardan como fuente de verdad.
+- `src/lib/finance/calc.ts`: lógica pura (saldos, resumen, tarjetas, recordatorios). **Los saldos de cuentas y bolsillos se derivan de las transacciones** (`computeLedger`); `balance` y `current_amount` en BD son solo caché.
+  - Ajustes (saldo inicial, "Ajustar saldo") son `ADJUSTMENT`: mueven saldo pero no son ingreso/gasto del mes. Los antiguos (INCOME/EXPENSE sin categoría "Ajuste de saldo"/"Saldo inicial") se detectan con `isAdjustment`.
+  - Gasto con `pocket_id`: el bolsillo paga hasta su saldo, el resto sale de la cuenta. Transferencia con bolsillo borrado = no mueve dinero (vuelve a la cuenta).
+  - Totales entre vistas: usar `accountTotals` (patrimonio = disponible + bolsillos − deuda). Montos escritos por el usuario: `parseAmount` ("200.000" = 200000).
 - `src/lib/storage/finance-store.ts`: store local-first con cola (`outbox`) hacia Supabase. Cualquier cambio de datos pasa por `financeStore`; la UI se suscribe con `useFinance()`. Las cuentas se sincronizan antes que las transacciones (clave foránea).
 - Voz: `useVoiceAssistant` (Web Speech → plan B: grabación + `/api/voice/transcribe`). Modelos Gemini baratos (`flash-lite` primero) en `gemini-client.ts` y `receipt-ocr.ts`.
 - Tema: tokens CSS en `globals.css` + colores en `tailwind.config.ts` (`bg-app`, `bg-card`, `bg-inset`, `text-white` = tinta del tema, `text-on-accent` = blanco fijo). No uses hex fijos para superficies.

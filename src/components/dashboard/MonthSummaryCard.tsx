@@ -6,7 +6,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Sheet, inputCls, labelCls } from "@/components/ui/Sheet";
 import { Category, FinancialSummary, Pocket } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
-import { monthKey, shiftMonth } from "@/lib/finance/calc";
+import { monthKey, parseAmount, shiftMonth } from "@/lib/finance/calc";
 import { useApp } from "@/lib/context/AppContext";
 import { BudgetProgress } from "./BudgetProgress";
 
@@ -54,7 +54,7 @@ export function MonthSummaryCard({ summary, month, onMonthChange, pockets, categ
 
   const submitSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const n = parseFloat(saveAmount.replace(/[^0-9.]/g, ""));
+    const n = parseAmount(saveAmount);
     if (!pocketId || !n) return;
     const ok = await financeStore.transferToPocket(pocketId, n);
     onShowToast(ok ? `${formatMoney(n)} apartados en tu bolsillo` : "No se pudo apartar el dinero");
@@ -63,7 +63,7 @@ export function MonthSummaryCard({ summary, month, onMonthChange, pockets, categ
 
   const submitBudget = async (e: React.FormEvent) => {
     e.preventDefault();
-    const n = parseFloat(budgetLimit.replace(/[^0-9.]/g, ""));
+    const n = parseAmount(budgetLimit);
     if (!budgetCat || !n) return;
     await financeStore.setBudget(budgetCat, n, month);
     onShowToast("Presupuesto guardado");
