@@ -22,7 +22,6 @@ import {
 import { useApp, ThemeMode, CurrencyCode } from "@/lib/context/AppContext";
 import { Language } from "@/lib/i18n/translations";
 import { isBiometricSupported, hasRegisteredBiometrics, registerBiometricCredential } from "@/lib/auth/webauthn";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { usePwa } from "@/lib/pwa/PwaProvider";
 import { financeStore } from "@/lib/storage/finance-store";
 import { isDebugEnabled, setDebugEnabled } from "@/lib/debug/logger";
@@ -293,7 +292,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="flex flex-col">
               <span className="text-xs font-semibold text-white">{t("databaseStatus")}</span>
               <span className="text-[10px] text-slate-400">
-                {isSupabaseConfigured() ? t("databaseConnected") : t("databaseLocal")}
+                {syncState !== "local" ? t("databaseConnected") : t("databaseLocal")}
                 {pending > 0 ? ` · ${pending} cambios por enviar` : ""}
               </span>
             </div>

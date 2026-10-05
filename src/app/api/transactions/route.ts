@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { todayStr, monthKey } from "@/lib/finance/calc";
-import { financeStore } from "@/lib/storage/finance-store";
+import { financeStore } from "@/lib/storage/server-store";
 
 export async function GET(req: NextRequest) {
   try {
