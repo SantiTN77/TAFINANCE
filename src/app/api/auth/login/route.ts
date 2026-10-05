@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
-import { createSessionToken, getMasterPin, isAuthConfigured } from "@/lib/auth/security";
+import { getMasterPin, isAuthConfigured } from "@/lib/auth/security";
 import { clientIp, hitPinThrottle, resetPinThrottle } from "@/lib/auth/throttle";
+import { createCookieClient } from "@/lib/auth/session";
+import { mintOwnerSession } from "@/lib/auth/owner-session";
+
+export const dynamic = "force-dynamic";
 
 function safeEqual(a: string, b: string): boolean {
   const ba = Buffer.from(a);
@@ -9,47 +13,59 @@ function safeEqual(a: string, b: string): boolean {
   return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
+const fail = (error: string, status: number, headers?: HeadersInit) =>
+  NextResponse.json({ success: false, error }, { status, headers });
+
+/**
+ * Dos formas de entrar:
+ *  - { email, password }: Supabase Auth (cualquier usuario activo).
+ *  - { pin }: desbloqueo rápido del dueño (TAFINANCE_PIN + TAFINANCE_OWNER_EMAIL).
+ * Ambas pasan por el limitador persistente ANTES de comprobar la credencial.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const masterPin = getMasterPin();
-    if (!masterPin || !isAuthConfigured()) {
-      console.error("[TAF][auth] TAFINANCE_PIN / TAFINANCE_SECRET no configurados: login deshabilitado");
-      return NextResponse.json({ success: false, error: "Bóveda no configurada en el servidor" }, { status: 503 });
-    }
+    const body = await req.json().catch(() => ({}));
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const pin = typeof body.pin === "string" || typeof body.pin === "number" ? String(body.pin).trim() : "";
+    const usingPassword = !!email && !!password;
+    if (!usingPassword && !pin) return fail("Credenciales incompletas", 400);
 
     const ip = clientIp(req.headers);
-    const throttle = await hitPinThrottle(ip);
+    const subject = usingPassword ? email : undefined;
+    const throttle = await hitPinThrottle(ip, subject);
     if (!throttle.allowed) {
-      if ("unavailable" in throttle) {
-        return NextResponse.json({ success: false, error: "Servicio de acceso no disponible" }, { status: 503 });
+      if ("unavailable" in throttle) return fail("Servicio de acceso no disponible", 503);
+      return fail(`Demasiados intentos. Reintenta en ${throttle.retryAfterSec}s`, 429, {
+        "Retry-After": String(throttle.retryAfterSec),
+      });
+    }
+
+    if (usingPassword) {
+      const client = await createCookieClient();
+      if (!client) return fail("Autenticación no configurada en el servidor", 503);
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error || !data.user) return fail("Correo o contraseña incorrectos", 401);
+      const { data: profile } = await client.from("profiles").select("status").eq("id", data.user.id).maybeSingle();
+      if (profile?.status !== "active") {
+        await client.auth.signOut();
+        return fail(
+          profile?.status === "disabled" ? "Cuenta deshabilitada" : "Cuenta pendiente de aprobación por un administrador",
+          403
+        );
       }
-      return NextResponse.json(
-        { success: false, error: `Demasiados intentos. Reintenta en ${throttle.retryAfterSec}s` },
-        { status: 429, headers: { "Retry-After": String(throttle.retryAfterSec) } }
-      );
+      await resetPinThrottle(ip, subject);
+      return NextResponse.json({ success: true, message: "Acceso concedido" });
     }
 
-    const body = await req.json();
-    const { pin, remember } = body;
-
-    if (!pin || !safeEqual(pin.toString().trim(), masterPin)) {
-      return NextResponse.json({ success: false, error: "PIN de seguridad incorrecto" }, { status: 401 });
-    }
+    const masterPin = getMasterPin();
+    if (!masterPin || !isAuthConfigured()) return fail("Desbloqueo por PIN no configurado", 503);
+    if (!safeEqual(pin, masterPin)) return fail("PIN de seguridad incorrecto", 401);
+    const minted = await mintOwnerSession();
+    if (!minted.ok) return fail(minted.error, minted.status);
     await resetPinThrottle(ip);
-
-    const token = await createSessionToken(remember ? 60 : 7);
-    const maxAge = (remember ? 60 : 7) * 24 * 60 * 60;
-
-    const response = NextResponse.json({ success: true, message: "Acceso concedido" });
-    response.cookies.set("tafinance_session", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge,
-      path: "/",
-    });
-    return response;
+    return NextResponse.json({ success: true, message: "Acceso concedido" });
   } catch {
-    return NextResponse.json({ success: false, error: "Error validando credenciales" }, { status: 500 });
+    return fail("Error validando credenciales", 500);
   }
 }

@@ -13,13 +13,14 @@ import {
   AlertCircle,
   Clock,
 } from "lucide-react";
+import { PasswordLogin } from "./PasswordLogin";
 import {
   isBiometricSupported,
   hasRegisteredBiometrics,
   authenticateWithBiometrics,
 } from "@/lib/auth/webauthn";
 
-function LockContent() {
+function LockContent({ onUsePassword }: { onUsePassword: () => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectPath = searchParams.get("redirect") || "/app";
@@ -398,9 +399,25 @@ function LockContent() {
             />
             <span>Mantener sesión iniciada en este móvil</span>
           </label>
+          <button
+            type="button"
+            onClick={onUsePassword}
+            className="mt-4 block mx-auto text-xs text-slate-400 hover:text-emerald-400 underline underline-offset-4"
+          >
+            Entrar con correo y contraseña
+          </button>
         </div>
       </div>
     </div>
+  );
+}
+
+function LockSwitch() {
+  const [mode, setMode] = useState<"password" | "pin">("password");
+  return mode === "password" ? (
+    <PasswordLogin onUsePin={() => setMode("pin")} />
+  ) : (
+    <LockContent onUsePassword={() => setMode("password")} />
   );
 }
 
@@ -413,7 +430,7 @@ export default function LockPage() {
         </div>
       }
     >
-      <LockContent />
+      <LockSwitch />
     </Suspense>
   );
 }

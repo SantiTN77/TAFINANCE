@@ -44,10 +44,10 @@ export async function GET(req: NextRequest) {
       }
     }
     if (gone) {
-      await db.from("push_subscriptions").delete().eq("id", row.id);
+      await db.from("push_subscriptions").delete().eq("user_id", row.user_id).eq("id", row.id);
       removed++;
     } else if (due.length) {
-      await db.from("push_subscriptions").update({ sent: [...sent] }).eq("id", row.id);
+      await db.from("push_subscriptions").update({ sent: [...sent] }).eq("user_id", row.user_id).eq("id", row.id);
     }
   }
   console.log("[TAF][push/cron]", { subs: data?.length || 0, delivered, removed });

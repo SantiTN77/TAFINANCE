@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken } from "./lib/auth/security";
+import { createServerClient } from "@supabase/ssr";
 
 // Public static files and public routes allowed without authentication
 const PUBLIC_PATHS = [
@@ -93,16 +93,36 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 6. Check session cookie for protected vault
-  const token = req.cookies.get("tafinance_session")?.value;
-  const isAuthenticated = await verifySessionToken(token);
+  // 6. Sesión de Supabase Auth. getUser() valida el JWT contra Auth y, si caducó, lo refresca
+  //    (las cookies renovadas se copian a la respuesta). Sin configuración → falla cerrado.
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  let refreshed: { name: string; value: string; options?: any }[] = [];
+  let isAuthenticated = false;
+  if (url && anonKey) {
+    const supabase = createServerClient(url, anonKey, {
+      cookies: {
+        getAll: () => req.cookies.getAll(),
+        setAll: (list: { name: string; value: string; options?: any }[]) => {
+          refreshed = list;
+          list.forEach(({ name, value }) => req.cookies.set(name, value));
+        },
+      },
+    });
+    const { data, error } = await supabase.auth.getUser();
+    isAuthenticated = !error && !!data.user;
+  }
+  const withCookies = (res: NextResponse) => {
+    refreshed.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+    return res;
+  };
 
   if (isAuthenticated) {
-    // If authenticated user visits /lock, redirect directly to /app
+    // Con sesión, /lock no tiene sentido: directo a la app
     if (pathname === "/lock") {
-      return NextResponse.redirect(new URL("/app", req.url));
+      return withCookies(NextResponse.redirect(new URL("/app", req.url)));
     }
-    return NextResponse.next();
+    return withCookies(NextResponse.next({ request: req }));
   }
 
   // 7. Unauthorized handling

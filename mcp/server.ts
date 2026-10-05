@@ -5,8 +5,16 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { financeStore } from "../src/lib/storage/server-store";
+import { storeForMcp } from "../src/lib/storage/server-store";
 import { parseVoiceFinancialInput } from "../src/lib/ai/gemini-client";
+
+// Proceso local: los datos son de UN usuario (MCP_USER_ID) con service_role (SUPABASE_SERVICE_ROLE_KEY)
+const scoped = storeForMcp();
+if (!scoped.ok) {
+  console.error(`[tafinance-mcp] ${scoped.error}`);
+  process.exit(1);
+}
+const financeStore = scoped.store;
 
 const server = new Server(
   {

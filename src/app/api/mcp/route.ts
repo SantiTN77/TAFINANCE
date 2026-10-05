@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { todayStr, monthKey } from "@/lib/finance/calc";
 import { checkMcpAuth } from "@/lib/auth/mcp-auth";
-import { financeStore } from "@/lib/storage/server-store";
+import { storeForMcp } from "@/lib/storage/server-store";
+import type { FinanceStore } from "@/lib/storage/finance-store";
 import { parseVoiceFinancialInput } from "@/lib/ai/gemini-client";
 
 // MCP Tools Definition
@@ -178,7 +179,7 @@ const MCP_TOOLS = [
 ];
 
 // Execute MCP Tool
-async function executeTool(name: string, args: Record<string, unknown> = {}) {
+async function executeTool(financeStore: FinanceStore, name: string, args: Record<string, unknown> = {}) {
   switch (name) {
     case "tafinance_get_balance": {
       const summary = await financeStore.getSummary();
@@ -538,8 +539,13 @@ export async function POST(req: NextRequest) {
       const toolName = params?.name;
       const toolArgs = params?.arguments || {};
 
+      // Los datos son de UN usuario (MCP_USER_ID); sin él, el MCP no toca datos
+      const scoped = storeForMcp();
+      if (!scoped.ok) {
+        return NextResponse.json({ jsonrpc: "2.0", id, error: { code: -32000, message: scoped.error } }, { status: scoped.status, headers: CORS_HEADERS });
+      }
       try {
-        const result = await executeTool(toolName, toolArgs);
+        const result = await executeTool(scoped.store, toolName, toolArgs);
         return NextResponse.json(
           {
             jsonrpc: "2.0",
