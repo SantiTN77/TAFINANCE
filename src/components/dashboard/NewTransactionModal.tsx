@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { Check, ArrowDownRight, ArrowUpRight, Repeat, DollarSign, CreditCard } from "lucide-react";
-import { Category, Account, Pocket, TransactionType } from "@/types/finance";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ArrowDownRight, ArrowUpRight, Repeat, DollarSign, CreditCard, Pencil, Trash2 } from "lucide-react";
+import { Category, Account, Pocket, Transaction, TransactionType } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
 import { useApp } from "@/lib/context/AppContext";
 import { floatDaysFor, parseAmount, parseDate, todayStr } from "@/lib/finance/calc";
 import { Sheet, inputCls, labelCls } from "@/components/ui/Sheet";
+import { isEditableType } from "@/lib/finance/tx-edit";
 import { logger } from "@/lib/debug/logger";
 
 interface NewTransactionModalProps {
@@ -16,6 +17,9 @@ interface NewTransactionModalProps {
   accounts: Account[];
   pockets?: Pocket[];
   onTransactionSaved: () => void;
+  /** Si se pasa, el formulario edita este movimiento en lugar de crear uno nuevo. */
+  editing?: Transaction | null;
+  onDelete?: (id: string) => void;
 }
 
 type Interval = "MONTHLY" | "BIWEEKLY" | "WEEKLY" | "YEARLY";
@@ -27,6 +31,8 @@ export function NewTransactionModal({
   accounts,
   pockets = [],
   onTransactionSaved,
+  editing = null,
+  onDelete,
 }: NewTransactionModalProps) {
   const { language, formatMoney } = useApp();
   const isEs = language === "es";
@@ -42,6 +48,13 @@ export function NewTransactionModal({
   const [recurrenceInterval, setRecurrenceInterval] = useState<Interval>("MONTHLY");
   const [date, setDate] = useState(todayStr());
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isEdit = !!editing;
+  // Transferencias (y ajustes): solo monto, descripción y fecha; tipo y vínculos fijos
+  const isTransfer = !!editing && !isEditableType(editing.type);
+  /** Evita que un formulario nuevo herede los valores del último movimiento editado. */
+  const wasEditing = useRef(false);
 
   const typeCategories = useMemo(() => categories.filter((c) => c.type === type), [categories, type]);
   const account = accounts.find((a) => a.id === accountId);
@@ -49,6 +62,31 @@ export function NewTransactionModal({
   // Valores por defecto cuando se abre o cambian los datos
   useEffect(() => {
     if (!isOpen) return;
+    setError(null);
+    setConfirmDelete(false);
+    if (editing) {
+      wasEditing.current = true;
+      setType(editing.type);
+      setAmount(String(editing.amount));
+      setDescription(editing.description);
+      setMerchant(editing.merchant || "");
+      setCategoryId(editing.category_id || "");
+      setAccountId(editing.account_id || "");
+      setPocketId(editing.pocket_id || "");
+      setIsRecurring(!!editing.is_recurring);
+      setRecurrenceInterval(editing.recurrence_interval || "MONTHLY");
+      setDate(editing.date);
+      return;
+    }
+    if (wasEditing.current) {
+      wasEditing.current = false;
+      setType("EXPENSE");
+      setAmount("");
+      setDescription("");
+      setMerchant("");
+      setPocketId("");
+      setIsRecurring(false);
+    }
     setDate(todayStr());
     setAccountId((prev) =>
       prev && accounts.some((a) => a.id === prev)
@@ -56,10 +94,12 @@ export function NewTransactionModal({
         : accounts.find((a) => a.type !== "credit")?.id || accounts[0]?.id || ""
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, editing?.id]);
 
   useEffect(() => {
+    if (isTransfer) return;
     setCategoryId((prev) => (typeCategories.some((c) => c.id === prev) ? prev : typeCategories[0]?.id || ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeCategories]);
 
   const floatDays = account?.type === "credit" && type === "EXPENSE" ? floatDaysFor(account, parseDate(date)) : null;
@@ -70,7 +110,30 @@ export function NewTransactionModal({
     if (!(numAmount > 0) || !description.trim()) return;
 
     setIsSaving(true);
+    setError(null);
     try {
+      if (editing) {
+        await financeStore.updateTransaction(
+          editing.id,
+          isTransfer
+            ? { amount: numAmount, description, merchant, date }
+            : {
+                type,
+                amount: numAmount,
+                description,
+                merchant,
+                category_id: categoryId || null,
+                account_id: accountId || editing.account_id,
+                pocket_id: pocketId || null,
+                is_recurring: isRecurring,
+                recurrence_interval: isRecurring ? recurrenceInterval : null,
+                date,
+              }
+        );
+        onTransactionSaved();
+        onClose();
+        return;
+      }
       await financeStore.addTransaction({
         type,
         amount: numAmount,
@@ -91,8 +154,9 @@ export function NewTransactionModal({
       setMerchant("");
       setPocketId("");
       setIsRecurring(false);
-    } catch (err) {
+    } catch (err: any) {
       logger.error("tx", "Error guardando movimiento", err);
+      setError(err?.message || (isEs ? "No se pudo guardar" : "Could not save"));
     } finally {
       setIsSaving(false);
     }
@@ -104,12 +168,21 @@ export function NewTransactionModal({
       onClose={onClose}
       title={
         <>
-          <DollarSign className="w-4 h-4 text-emerald-400" />
-          <span className="uppercase tracking-wider">{isEs ? "Nuevo movimiento" : "New transaction"}</span>
+          {isEdit ? <Pencil className="w-4 h-4 text-emerald-400" /> : <DollarSign className="w-4 h-4 text-emerald-400" />}
+          <span className="uppercase tracking-wider">
+            {isEdit ? (isEs ? "Editar movimiento" : "Edit transaction") : isEs ? "Nuevo movimiento" : "New transaction"}
+          </span>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
+        {isTransfer ? (
+          <p className="text-[11px] text-slate-400 p-2.5 rounded-xl bg-inset border border-white/[0.06]">
+            {isEs
+              ? "Transferencia: puedes cambiar monto, descripción y fecha. Los saldos y bolsillos se recalculan solos."
+              : "Transfer: you can change amount, description and date. Balances update automatically."}
+          </p>
+        ) : (
         <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-inset border border-white/[0.06]">
           {([
             ["EXPENSE", isEs ? "Gasto" : "Expense", ArrowDownRight, "bg-rose-500/20 text-rose-300 border-rose-500/30"],
@@ -128,6 +201,7 @@ export function NewTransactionModal({
             </button>
           ))}
         </div>
+        )}
 
         <div>
           <label className={labelCls}>{isEs ? "Monto" : "Amount"}</label>
@@ -140,7 +214,7 @@ export function NewTransactionModal({
               onChange={(e) => setAmount(e.target.value)}
               placeholder="45000"
               className={`${inputCls} text-base font-extrabold pr-14`}
-              autoFocus
+              autoFocus={!isEdit}
             />
             <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">COP</span>
           </div>
@@ -158,6 +232,7 @@ export function NewTransactionModal({
           />
         </div>
 
+        {!isTransfer && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
             <label className={labelCls}>{isEs ? "Cuenta o tarjeta" : "Account or card"}</label>
@@ -181,6 +256,7 @@ export function NewTransactionModal({
             </select>
           </div>
         </div>
+        )}
 
         {floatDays !== null && (
           <div className="flex items-start gap-2 p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-[11px] text-violet-300">
@@ -210,7 +286,7 @@ export function NewTransactionModal({
           </div>
         </div>
 
-        {pockets.length > 0 && (
+        {!isTransfer && pockets.length > 0 && (
           <div>
             <label className={labelCls}>{isEs ? "Bolsillo vinculado (opcional)" : "Linked pocket (optional)"}</label>
             <select value={pocketId} onChange={(e) => setPocketId(e.target.value)} className={inputCls}>
@@ -224,6 +300,7 @@ export function NewTransactionModal({
           </div>
         )}
 
+        {!isTransfer && (
         <div className="p-3.5 rounded-2xl bg-inset border border-white/[0.08] space-y-2.5">
           <label className="flex items-center justify-between gap-3 cursor-pointer">
             <span className="flex items-center gap-2">
@@ -268,6 +345,13 @@ export function NewTransactionModal({
             </div>
           )}
         </div>
+        )}
+
+        {error && (
+          <p role="alert" className="text-[11px] text-rose-400 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+            {error}
+          </p>
+        )}
 
         <button
           type="submit"
@@ -277,10 +361,30 @@ export function NewTransactionModal({
           <Check className="w-4 h-4 stroke-[3]" />
           {isSaving
             ? isEs ? "Guardando…" : "Saving…"
+            : isEdit
+            ? isEs ? "Guardar cambios" : "Save changes"
             : isRecurring
             ? isEs ? "Guardar recurrente" : "Save recurring"
             : isEs ? "Registrar" : "Save"}
         </button>
+        {isEdit && onDelete && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirmDelete) return setConfirmDelete(true);
+              onDelete(editing!.id);
+              onClose();
+            }}
+            className={`w-full py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
+              confirmDelete ? "bg-rose-500 text-on-accent" : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+            }`}
+          >
+            <Trash2 className="w-4 h-4" />
+            {confirmDelete
+              ? isEs ? "Toca de nuevo para eliminar" : "Tap again to delete"
+              : isEs ? "Eliminar movimiento" : "Delete transaction"}
+          </button>
+        )}
         {amount && <p className="text-center text-[11px] text-slate-400">{formatMoney(parseAmount(amount) || 0)}</p>}
       </form>
     </Sheet>

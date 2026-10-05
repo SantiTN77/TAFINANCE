@@ -16,6 +16,7 @@ import {
 } from "@/lib/storage/remote-schema";
 import { buildSummary, computeLedger, monthKey, todayStr } from "@/lib/finance/calc";
 import { logger } from "@/lib/debug/logger";
+import { TxValidationError, applyTxPatch, sanitizeTxUpdates } from "@/lib/finance/tx-edit";
 
 /**
  * Store financiero local-first.
@@ -26,7 +27,7 @@ import { logger } from "@/lib/debug/logger";
  *   red, se reintentan al volver la conexión. Nunca se pierden datos por un fallo remoto.
  * - El navegador NO habla con Supabase: usa /api/data (protegido por la sesión). Solo el
  *   servidor tiene la clave service_role; la BD rechaza la clave anónima.
- * - Los saldos de las cuentas se DERIVAN de las transacciones (computeBalances), así
+ * - Los saldos de las cuentas se DERIVAN de las transacciones (computeLedger), así
  *   nunca quedan desfasados respecto al historial.
  * - En el servidor (API routes / MCP) no hay localStorage: se lee de Supabase, se aplica
  *   el cambio y se espera a que se escriba antes de responder.
@@ -664,14 +665,39 @@ class FinanceStore {
     return newTx;
   }
 
-  async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction | null> {
+  /** Devuelve un movimiento por id (null si no existe). */
+  async getTransaction(id: string): Promise<Transaction | null> {
+    await this.ready();
+    return this.transactions.find((t) => t.id === id) || null;
+  }
+
+  /**
+   * Edita un movimiento. Valida los cambios (lanza TxValidationError); commit() recalcula
+   * los saldos de cuentas y bolsillos desde el historial (computeLedger).
+   */
+  async updateTransaction(id: string, updates: Partial<Transaction> | Record<string, unknown>): Promise<Transaction | null> {
     await this.ready();
     const i = this.transactions.findIndex((t) => t.id === id);
     if (i === -1) return null;
-    this.transactions[i] = { ...this.transactions[i], ...updates };
-    this.commit([this.op("transactions", this.transactions[i])]);
+    const current = this.transactions[i];
+    const { next, remote } = applyTxPatch(current, sanitizeTxUpdates(current, updates as Record<string, unknown>));
+
+    if (next.account_id && !this.accounts.some((a) => a.id === next.account_id)) {
+      throw new TxValidationError("La cuenta no existe");
+    }
+    if (next.to_account_id && !this.accounts.some((a) => a.id === next.to_account_id)) {
+      throw new TxValidationError("La cuenta destino no existe");
+    }
+    if (next.pocket_id && next.pocket_id !== current.pocket_id && !this.pockets.some((p) => p.id === next.pocket_id)) {
+      throw new TxValidationError("El bolsillo no existe");
+    }
+
+    const ops: OutboxOp[] = [this.op("transactions", remote)];
+    this.transactions[i] = next;
+    this.commit(ops);
+    logger.info("store", "Movimiento editado", { id, campos: Object.keys(updates) });
     await this.settle();
-    return this.transactions[i];
+    return next;
   }
 
   /**
