@@ -6,7 +6,7 @@ delete process.env.NEXT_PUBLIC_SUPABASE_URL;
 delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 import { Transaction } from "../src/types/finance";
-import { TxValidationError, applyTxPatch, pocketDeltas, sanitizeTxUpdates } from "../src/lib/finance/tx-edit";
+import { TxValidationError, applyTxPatch, sanitizeTxUpdates } from "../src/lib/finance/tx-edit";
 
 let failed = 0;
 function check(name: string, cond: boolean, extra?: unknown) {
@@ -85,15 +85,10 @@ throws("transferencia a la misma cuenta rechazada", () =>
   sanitizeTxUpdates({ ...base, type: "TRANSFER", to_account_id: "acc-cash" }, { account_id: "acc-cash" })
 );
 
-{
-  const aporte: Transaction = { ...base, type: "TRANSFER", pocket_id: "p1", amount: 100 };
-  check("delta al subir un aporte", pocketDeltas(aporte, { ...aporte, amount: 150 }).get("p1") === 50);
-  const moved = pocketDeltas(aporte, { ...aporte, pocket_id: "p2" });
-  check("delta al cambiar de bolsillo", moved.get("p1") === -100 && moved.get("p2") === 100, moved);
-  check("delta al borrar", pocketDeltas(aporte, null).get("p1") === -100);
-  check("gasto con bolsillo no mueve el bolsillo", pocketDeltas({ ...base, pocket_id: "p1" }, null).size === 0);
-  check("sin cambio de monto no hay delta", pocketDeltas(aporte, { ...aporte, description: "x" }).size === 0);
-}
+throws("ajuste no permite mover de cuenta", () =>
+  sanitizeTxUpdates({ ...base, type: "ADJUSTMENT", to_account_id: "acc-main" }, { account_id: "acc-cash" })
+);
+check("ajuste permite cambiar monto", sanitizeTxUpdates({ ...base, type: "ADJUSTMENT" }, { amount: 10 }).patch.amount === 10);
 
 /* ------------------------------ store (local) ------------------------------ */
 
@@ -143,6 +138,26 @@ async function storeTests() {
   check("editar aporte baja la cuenta", (await balanceOf("acc-main")) === 850_000, await balanceOf("acc-main"));
   check("patrimonio igual tras editar aporte", (await totalOf()) === totalBefore, { antes: totalBefore, ahora: await totalOf() });
   await rejects("aporte no puede volverse gasto", () => financeStore.updateTransaction(aporte.id, { type: "EXPENSE" }));
+
+  // Mover el aporte a otro bolsillo: el ledger deriva ambos
+  const pocket2 = await financeStore.addPocket({
+    name: "Moto", target_amount: 500_000, current_amount: 0, icon: "Bike", color: "#fff", category: "moto",
+  });
+  await financeStore.updateTransaction(aporte.id, { pocket_id: pocket2.id });
+  const amountOf = async (id: string) => (await financeStore.getPockets()).find((p) => p.id === id)!.current_amount;
+  check("mover aporte de bolsillo", (await amountOf(pocket.id)) === 0 && (await amountOf(pocket2.id)) === 150_000);
+  await financeStore.updateTransaction(aporte.id, { pocket_id: pocket.id });
+
+  // Ajuste de saldo: cambia saldo pero no cuenta como ingreso/gasto del mes
+  await financeStore.adjustBalance("acc-main", (await balanceOf("acc-main")) + 40_000, "Ajuste de prueba");
+  const ajuste = (await financeStore.getTransactions()).find((t) => t.description === "Ajuste de prueba")!;
+  const incomeBefore = (await financeStore.getSummary()).monthlyIncome;
+  const balBefore = await balanceOf("acc-main");
+  await financeStore.updateTransaction(ajuste.id, { amount: 60_000 });
+  check("editar ajuste mueve el saldo", (await balanceOf("acc-main")) === balBefore + 20_000, await balanceOf("acc-main"));
+  check("editar ajuste no cuenta como ingreso", (await financeStore.getSummary()).monthlyIncome === incomeBefore);
+  await rejects("ajuste no cambia a gasto", () => financeStore.updateTransaction(ajuste.id, { type: "EXPENSE" }));
+  await financeStore.deleteTransaction(ajuste.id);
 
   check("borrar aporte", await financeStore.deleteTransaction(aporte.id));
   check("borrar aporte revierte bolsillo", (await pocketAmount()) === 0, await pocketAmount());

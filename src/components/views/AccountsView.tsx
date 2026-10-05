@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Account, Transaction } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
-import { cardStatus } from "@/lib/finance/calc";
+import { accountTotals, cardStatus, parseAmount } from "@/lib/finance/calc";
 import { useApp } from "@/lib/context/AppContext";
 import { Sheet, inputCls, labelCls } from "@/components/ui/Sheet";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -47,8 +47,8 @@ export function AccountsView({ accounts, transactions, onShowToast }: AccountsVi
   const [paying, setPaying] = useState<Account | null>(null);
   const [adjusting, setAdjusting] = useState<Account | null>(null);
 
-  const available = accounts.filter((a) => a.type !== "credit").reduce((s, a) => s + a.balance, 0);
-  const debt = accounts.filter((a) => a.type === "credit").reduce((s, a) => s + Math.max(0, -a.balance), 0);
+  // Mismo cálculo que el dashboard (accountTotals) para que las cifras cuadren entre vistas
+  const { available, debt } = accountTotals(accounts);
 
   const statuses = useMemo(() => {
     const map = new Map<string, ReturnType<typeof cardStatus>>();
@@ -184,6 +184,7 @@ export function AccountsView({ accounts, transactions, onShowToast }: AccountsVi
         onClose={() => setEditing(null)}
         onToast={onShowToast}
         canDelete={accounts.length > 1}
+        locked={editing && editing !== "new" ? financeStore.hasMovements(editing.id) : false}
       />
       <PayCardSheet
         card={paying}
@@ -205,12 +206,15 @@ function AccountForm({
   onClose,
   onToast,
   canDelete,
+  locked,
 }: {
   open: boolean;
   account: Account | null;
   onClose: () => void;
   onToast: (m: string) => void;
   canDelete: boolean;
+  /** La cuenta tiene movimientos: no puede pasar de cuenta a tarjeta ni al revés. */
+  locked: boolean;
 }) {
   const [name, setName] = useState(account?.name || "");
   const [type, setType] = useState<Account["type"]>(account?.type || "bank");
@@ -240,10 +244,14 @@ function AccountForm({
           }
         : { cutoff_day: null, due_day: null, annual_yield: null, remind_days_before: null };
       if (account) {
-        await financeStore.updateAccount(account.id, { name: name.trim(), type, ...extra });
+        const updated = await financeStore.updateAccount(account.id, { name: name.trim(), type, ...extra });
+        if (!updated) {
+          onToast("No se puede convertir una cuenta con movimientos en tarjeta (ni al revés). Crea una nueva.");
+          return;
+        }
         onToast("Cuenta actualizada");
       } else {
-        const init = parseFloat(initial.replace(/[^0-9.-]/g, "")) || 0;
+        const init = parseAmount(initial) || 0;
         await financeStore.addAccount({
           name: name.trim(),
           type,
@@ -273,12 +281,15 @@ function AccountForm({
           {(Object.keys(TYPE_META) as Account["type"][]).map((t) => {
             const M = TYPE_META[t];
             const Icon = M.icon;
+            const blocked = locked && !!account && (t === "credit") !== (account.type === "credit");
             return (
               <button
                 type="button"
                 key={t}
+                disabled={blocked}
+                title={blocked ? "Tiene movimientos: crea una cuenta nueva para cambiar entre cuenta y tarjeta" : undefined}
                 onClick={() => setType(t)}
-                className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-colors ${
+                className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${
                   type === t ? "bg-indigo2/15 border-indigo2/50 text-white" : "bg-inset border-white/[0.06] text-slate-400"
                 }`}
               >
@@ -375,8 +386,8 @@ function PayCardSheet({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!card) return;
-    const n = parseFloat(amount.replace(/[^0-9.]/g, ""));
-    if (!n || !from) return;
+    const n = parseAmount(amount);
+    if (!(n > 0) || !from) return;
     const tx = await financeStore.transferBetweenAccounts(from, card.id, n, `Pago de tarjeta ${card.name}`);
     onToast(tx ? `Pago de ${formatMoney(n)} registrado` : "No se pudo registrar el pago");
     if (tx) onClose();
@@ -428,7 +439,7 @@ function AdjustSheet({ account, onClose, onToast }: { account: Account | null; o
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account) return;
-    const n = parseFloat(value.replace(/[^0-9.-]/g, ""));
+    const n = parseAmount(value);
     if (isNaN(n)) return;
     const target = account.type === "credit" ? -Math.abs(n) : n;
     await financeStore.adjustBalance(account.id, target);

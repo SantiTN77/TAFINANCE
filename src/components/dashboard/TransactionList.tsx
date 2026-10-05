@@ -105,7 +105,9 @@ export function TransactionList({ transactions, categories, accounts, onDeleteTr
                   const category = categories.find((c) => c.id === tx.category_id);
                   const account = accounts.find((a) => a.id === tx.account_id);
                   const toAccount = accounts.find((a) => a.id === tx.to_account_id);
-                  const isIncome = tx.type === "INCOME";
+                  const isAdjust = tx.type === "ADJUSTMENT";
+                  // Un ajuste se muestra con el signo de su efecto, pero no es ingreso/gasto del mes
+                  const isIncome = tx.type === "INCOME" || (isAdjust && !!tx.to_account_id);
                   const isTransfer = tx.type === "TRANSFER";
                   const tone = isTransfer
                     ? "bg-sky-500/15 text-sky2 border-sky-500/25"
@@ -129,7 +131,7 @@ export function TransactionList({ transactions, categories, accounts, onDeleteTr
                           <p className="text-xs font-bold text-white truncate">{tx.merchant || tx.description}</p>
                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span className="text-[10px] text-slate-400 truncate max-w-[130px]">
-                              {isTransfer ? (toAccount ? `→ ${toAccount.name}` : "Transferencia") : category?.name || "Sin categoría"}
+                              {isTransfer ? (toAccount ? `→ ${toAccount.name}` : "Transferencia") : isAdjust ? "Ajuste de saldo" : category?.name || "Sin categoría"}
                             </span>
                             {account && (
                               <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-px rounded bg-white/[0.05] text-slate-300">

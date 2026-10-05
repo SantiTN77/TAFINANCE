@@ -46,6 +46,13 @@ export function sanitizeTxUpdates(current: Transaction, updates: Record<string, 
   const cleared: Clearable[] = [];
   const has = (k: string) => Object.prototype.hasOwnProperty.call(updates, k) && updates[k] !== undefined;
 
+  // Un ajuste de saldo está atado a su cuenta (la dirección depende de to_account_id)
+  if (current.type === "ADJUSTMENT") {
+    for (const k of ["account_id", "to_account_id", "pocket_id", "category_id"]) {
+      if (has(k)) throw new TxValidationError("Un ajuste de saldo solo permite cambiar monto, descripción y fecha");
+    }
+  }
+
   if (has("type")) {
     const t = updates.type;
     if (t !== "EXPENSE" && t !== "INCOME" && t !== "TRANSFER") throw new TxValidationError("Tipo inválido");
@@ -124,26 +131,4 @@ export function applyTxPatch(current: Transaction, { patch, cleared }: TxPatch):
     remote[k] = null;
   }
   return { next, remote };
-}
-
-/** Dinero que un movimiento aportó a un bolsillo (solo los aportes, que son TRANSFER). */
-export function pocketContribution(tx: Transaction | null | undefined): { pocketId: string; amount: number } | null {
-  if (!tx || tx.type !== "TRANSFER" || !tx.pocket_id) return null;
-  return { pocketId: tx.pocket_id, amount: Number(tx.amount) };
-}
-
-/**
- * Cuánto debe moverse cada bolsillo al pasar de `before` a `after`
- * (after = null cuando el movimiento se borra).
- */
-export function pocketDeltas(before: Transaction | null, after: Transaction | null): Map<string, number> {
-  const out = new Map<string, number>();
-  const add = (c: ReturnType<typeof pocketContribution>, sign: 1 | -1) => {
-    if (!c) return;
-    out.set(c.pocketId, Math.round(((out.get(c.pocketId) || 0) + sign * c.amount) * 100) / 100);
-  };
-  add(pocketContribution(before), -1);
-  add(pocketContribution(after), 1);
-  for (const [k, v] of out) if (v === 0) out.delete(k);
-  return out;
 }

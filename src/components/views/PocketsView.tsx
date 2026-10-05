@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Pocket } from "@/types/finance";
 import { useApp } from "@/lib/context/AppContext";
+import { parseAmount } from "@/lib/finance/calc";
 
 interface PocketsViewProps {
   pockets: Pocket[];
@@ -54,7 +55,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
 
     await onAddPocket({
       name,
-      target_amount: Number(targetAmount),
+      target_amount: parseAmount(targetAmount) || 0,
       current_amount: 0,
       category,
       color,
@@ -71,7 +72,7 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
     e.preventDefault();
     if (!selectedPocketForTransfer || !transferAmount) return;
 
-    const amountNum = Number(transferAmount);
+    const amountNum = parseAmount(transferAmount);
     if (isNaN(amountNum) || amountNum <= 0) return;
 
     const success = await onTransferToPocket(selectedPocketForTransfer.id, amountNum);
@@ -295,9 +296,10 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Monto Objetivo (Meta)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   required
-                  placeholder="Ej. 1000000"
+                  placeholder="Ej. 1.000.000"
                   value={targetAmount}
                   onChange={(e) => setTargetAmount(e.target.value)}
                   className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#8083ff]"
@@ -376,10 +378,11 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Monto a Aportar</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   autoFocus
                   required
-                  placeholder="Ej. 50000"
+                  placeholder="Ej. 50.000"
                   value={transferAmount}
                   onChange={(e) => setTransferAmount(e.target.value)}
                   className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-base text-white placeholder-slate-500 focus:outline-none focus:border-[#4cd7f6]"

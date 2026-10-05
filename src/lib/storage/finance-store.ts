@@ -14,9 +14,9 @@ import {
   RemoteSnapshot,
   Table,
 } from "@/lib/storage/remote-schema";
-import { buildSummary, computeBalances, monthKey, todayStr } from "@/lib/finance/calc";
+import { buildSummary, computeLedger, monthKey, todayStr } from "@/lib/finance/calc";
 import { logger } from "@/lib/debug/logger";
-import { TxValidationError, applyTxPatch, pocketDeltas, sanitizeTxUpdates } from "@/lib/finance/tx-edit";
+import { TxValidationError, applyTxPatch, sanitizeTxUpdates } from "@/lib/finance/tx-edit";
 
 /**
  * Store financiero local-first.
@@ -27,7 +27,7 @@ import { TxValidationError, applyTxPatch, pocketDeltas, sanitizeTxUpdates } from
  *   red, se reintentan al volver la conexión. Nunca se pierden datos por un fallo remoto.
  * - El navegador NO habla con Supabase: usa /api/data (protegido por la sesión). Solo el
  *   servidor tiene la clave service_role; la BD rechaza la clave anónima.
- * - Los saldos de las cuentas se DERIVAN de las transacciones (computeBalances), así
+ * - Los saldos de las cuentas se DERIVAN de las transacciones (computeLedger), así
  *   nunca quedan desfasados respecto al historial.
  * - En el servidor (API routes / MCP) no hay localStorage: se lee de Supabase, se aplica
  *   el cambio y se espera a que se escriba antes de responder.
@@ -238,18 +238,27 @@ class FinanceStore {
     }
   }
 
+  /** Saldos de cuentas y bolsillos: siempre derivados del historial. */
   private recomputeBalances() {
-    this.accounts = computeBalances(this.accounts, this.transactions);
+    const ledger = computeLedger(this.accounts, this.transactions, this.pockets);
+    this.accounts = ledger.accounts;
+    this.pockets = ledger.pockets;
   }
 
   /** Aplica un cambio: recalcula saldos, guarda, encola y notifica. */
   private commit(ops: OutboxOp[] = []) {
     const before = new Map(this.accounts.map((a) => [a.id, a.balance]));
+    const pocketsBefore = new Map(this.pockets.map((p) => [p.id, p.current_amount]));
     this.recomputeBalances();
-    // Los saldos de cuentas que cambiaron también viajan al servidor
+    // Los saldos derivados que cambiaron también viajan al servidor (lecturas de API/MCP)
     for (const a of this.accounts) {
       if (before.get(a.id) !== a.balance) {
         ops.push({ id: uid("op"), table: "accounts", op: "upsert", row: pick("accounts", a) });
+      }
+    }
+    for (const p of this.pockets) {
+      if (pocketsBefore.has(p.id) && pocketsBefore.get(p.id) !== p.current_amount) {
+        ops.push({ id: uid("op"), table: "pockets", op: "upsert", row: pick("pockets", p) });
       }
     }
     // Las cuentas primero: las transacciones dependen de ellas (clave foránea)
@@ -469,16 +478,28 @@ class FinanceStore {
     const i = this.accounts.findIndex((a) => a.id === id);
     if (i === -1) return null;
     const { balance: _ignored, ...rest } = updates;
-    this.accounts[i] = { ...this.accounts[i], ...rest };
+    const current = this.accounts[i];
+    // Convertir una cuenta con historial en tarjeta (o al revés) reinterpreta ingresos/gastos
+    // pasados como deuda: es lo que infló la deuda de tarjeta. Se exige crear una cuenta nueva.
+    if (rest.type && (rest.type === "credit") !== (current.type === "credit") && this.hasMovements(id)) {
+      logger.warn("store", "Cambio de tipo bloqueado: la cuenta tiene movimientos", { id, from: current.type, to: rest.type });
+      return null;
+    }
+    this.accounts[i] = { ...current, ...rest };
     this.commit([this.op("accounts", this.accounts[i])]);
     await this.settle();
     return this.accounts[i];
   }
 
+  /** true si algún movimiento usa la cuenta (origen o destino). */
+  hasMovements(id: string): boolean {
+    return this.transactions.some((t) => t.account_id === id || t.to_account_id === id);
+  }
+
   async deleteAccount(id: string): Promise<boolean> {
     await this.ready();
     if (this.accounts.length <= 1) return false;
-    if (this.transactions.some((t) => t.account_id === id || t.to_account_id === id)) return false;
+    if (this.hasMovements(id)) return false;
     this.accounts = this.accounts.filter((a) => a.id !== id);
     this.commit([this.del("accounts", id)]);
     await this.settle();
@@ -492,12 +513,14 @@ class FinanceStore {
     if (!acc) return null;
     const diff = Math.round((target - acc.balance) * 100) / 100;
     if (diff === 0) return null;
+    // ADJUSTMENT: mueve el saldo pero no cuenta como ingreso/gasto del mes
     return this.addTransaction({
-      type: diff > 0 ? "INCOME" : "EXPENSE",
+      type: "ADJUSTMENT",
       amount: Math.abs(diff),
       currency: acc.currency || "COP",
       description,
       account_id: accountId,
+      to_account_id: diff > 0 ? accountId : null,
       date: todayStr(),
     });
   }
@@ -555,7 +578,9 @@ class FinanceStore {
     await this.ready();
     const i = this.pockets.findIndex((p) => p.id === id);
     if (i === -1) return null;
-    this.pockets[i] = { ...this.pockets[i], ...updates };
+    // current_amount es derivado del historial: se ignora (usar transferToPocket o un gasto con pocket_id)
+    const { current_amount: _derived, ...rest } = updates;
+    this.pockets[i] = { ...this.pockets[i], ...rest };
     this.commit([this.op("pockets", this.pockets[i])]);
     await this.settle();
     return this.pockets[i];
@@ -579,7 +604,7 @@ class FinanceStore {
     return true;
   }
 
-  /** Aporta dinero de una cuenta a un bolsillo (el patrimonio total no cambia). */
+  /** Aporta dinero de una cuenta a un bolsillo (el patrimonio total no cambia; el saldo del bolsillo se deriva). */
   async transferToPocket(pocketId: string, amount: number, accountId?: string): Promise<boolean> {
     await this.ready();
     const pocket = this.pockets.find((p) => p.id === pocketId);
@@ -589,8 +614,7 @@ class FinanceStore {
       this.accounts.find((a) => a.type !== "credit") ||
       this.accounts[0];
 
-    pocket.current_amount = Number(pocket.current_amount) + amount;
-    const ops = [this.op("pockets", pocket)];
+    const ops: OutboxOp[] = [];
     const tx = this.buildTx({
       type: "TRANSFER",
       amount,
@@ -648,8 +672,8 @@ class FinanceStore {
   }
 
   /**
-   * Edita un movimiento. Valida los cambios (lanza TxValidationError), recalcula los saldos
-   * derivados y corrige los bolsillos si cambia un aporte (monto o bolsillo destino).
+   * Edita un movimiento. Valida los cambios (lanza TxValidationError); commit() recalcula
+   * los saldos de cuentas y bolsillos desde el historial (computeLedger).
    */
   async updateTransaction(id: string, updates: Partial<Transaction> | Record<string, unknown>): Promise<Transaction | null> {
     await this.ready();
@@ -669,24 +693,11 @@ class FinanceStore {
     }
 
     const ops: OutboxOp[] = [this.op("transactions", remote)];
-    ops.push(...this.applyPocketDeltas(pocketDeltas(current, next)));
     this.transactions[i] = next;
     this.commit(ops);
     logger.info("store", "Movimiento editado", { id, campos: Object.keys(updates) });
     await this.settle();
     return next;
-  }
-
-  /** Ajusta los bolsillos afectados y devuelve las operaciones para Supabase. */
-  private applyPocketDeltas(deltas: Map<string, number>): OutboxOp[] {
-    const ops: OutboxOp[] = [];
-    for (const [pocketId, delta] of deltas) {
-      const pocket = this.pockets.find((p) => p.id === pocketId);
-      if (!pocket) continue;
-      pocket.current_amount = Math.max(0, Math.round((Number(pocket.current_amount) + delta) * 100) / 100);
-      ops.push(this.op("pockets", pocket));
-    }
-    return ops;
   }
 
   /**
@@ -706,9 +717,8 @@ class FinanceStore {
     await this.ready();
     const i = this.transactions.findIndex((t) => t.id === id);
     if (i === -1) return false;
-    const tx = this.transactions[i];
-    // Revertir aporte a bolsillo
-    const ops: OutboxOp[] = [this.del("transactions", id), ...this.applyPocketDeltas(pocketDeltas(tx, null))];
+    // Saldos de cuentas y bolsillos se recalculan en commit()
+    const ops: OutboxOp[] = [this.del("transactions", id)];
     this.transactions.splice(i, 1);
     this.commit(ops);
     await this.settle();
