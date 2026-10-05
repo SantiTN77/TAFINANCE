@@ -28,7 +28,7 @@ cp .env.example .env.local   # completa las variables
 pnpm dev
 ```
 
-Variables (ver `.env.example`): `TAFINANCE_PIN`, `TAFINANCE_SECRET`, `GEMINI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`, `MCP_TOKEN`.
+Variables (ver `.env.example`): `TAFINANCE_PIN`, `TAFINANCE_SECRET`, `GEMINI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`, `MCP_TOKEN`.
 
 Base de datos: aplica las migraciones de `supabase/migrations/` (la última agrega tarjetas, transferencias entre cuentas y `push_subscriptions`).
 
@@ -51,9 +51,10 @@ pnpm test
 
 ## Seguridad
 
-- Sin `TAFINANCE_PIN` en producción se usa un PIN de desarrollo: **defínelo siempre**.
+- Falla cerrado: sin `TAFINANCE_PIN` (mín. 4) y `TAFINANCE_SECRET` (mín. 32 caracteres) nadie puede entrar fuera de `next dev`.
 - La biometría se valida en el servidor (firma WebAuthn) y queda ligada al dispositivo mediante una cookie firmada.
-- Las tablas de Supabase usan políticas abiertas (uso personal). Para endurecer, define `SUPABASE_SERVICE_ROLE_KEY` y mueve el acceso a rutas del servidor.
+- El navegador no habla con Supabase: lee y escribe por `/api/data` (protegido por la sesión). Solo el servidor tiene `SUPABASE_SERVICE_ROLE_KEY`; las tablas tienen RLS sin políticas para `anon`/`authenticated` (`supabase/migrations/20261004b_lockdown_rls.sql`).
+- Los intentos de PIN se limitan en la BD (`auth_throttle`): 5 por IP y 20 globales, con bloqueo creciente. La biometría no se ve afectada.
 
 ## Licencia
 
