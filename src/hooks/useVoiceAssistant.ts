@@ -5,6 +5,7 @@ import { OrbState } from "@/components/voice/VoiceOrb";
 import { ParsedVoiceTransaction } from "@/types/finance";
 import { logger } from "@/lib/debug/logger";
 import { todayStr } from "@/lib/finance/calc";
+import { blobToGeminiAudio } from "@/lib/audio/wav";
 
 interface UseVoiceAssistantOptions {
   onParsed?: (result: ParsedVoiceTransaction) => void;
@@ -15,6 +16,8 @@ interface UseVoiceAssistantOptions {
 type Engine = "speech" | "recorder";
 
 const SR_BROKEN_KEY = "tafinance_sr_broken";
+/** Sesiones seguidas en que Web Speech terminó sin texto; al llegar a 2 se usa directo la grabadora. */
+const SR_EMPTY_KEY = "tafinance_sr_empty";
 const MAX_RECORD_MS = 12000;
 const SILENCE_AFTER_SPEECH_MS = 1600;
 
@@ -60,6 +63,8 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   /** Número de sesión: invalida callbacks tardíos de sesiones canceladas. */
   const sessionRef = useRef(0);
   const finishedRef = useRef(false);
+  /** El usuario tocó el orbe para terminar: si no hubo texto, no se pasa a la grabadora. */
+  const stopRequestedRef = useRef(false);
 
   /* ------------------------------ utilidades ------------------------------ */
 
@@ -200,21 +205,21 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         releaseAudio();
         setState("processing");
         try {
-          const buf = new Uint8Array(await blob.arrayBuffer());
-          let bin = "";
-          for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+          // Gemini no soporta audio/webm de forma oficial: se envía como WAV 16 kHz mono
+          const audio = await blobToGeminiAudio(blob);
+          logger.info("voice", "Audio listo para Gemini", { mimeType: audio.mimeType, converted: audio.converted, b64: audio.base64.length });
           const res = await fetch("/api/voice/transcribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              audio: btoa(bin),
-              mimeType: mime,
+              audio: audio.base64,
+              mimeType: audio.mimeType,
               categories: optionsRef.current.getCategories?.(),
               today: todayStr(),
             }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "No se pudo transcribir");
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `Error ${res.status} al transcribir`);
           if (!data.transcript) {
             setErrorMsg("No se entendió el audio. Intenta de nuevo o escribe abajo.");
             setState("error");
@@ -248,23 +253,82 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     [finalize, parseTranscript, releaseAudio, startAnalyser]
   );
 
+  /* ------------------------------ motor: grabadora (abre el micrófono) ------------------------------ */
+
+  /** Pide el micrófono y arranca la grabadora + Gemini. Plan B o motor principal si no hay Web Speech. */
+  const startRecorderSession = useCallback(
+    async (session: number) => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setErrorMsg("Este navegador no permite usar el micrófono (¿conexión no segura?). Escribe el gasto abajo.");
+        setState("error");
+        logger.warn("voice", "mediaDevices no disponible");
+        return;
+      }
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } catch (err: any) {
+        logger.warn("voice", "Micrófono no disponible", err);
+        if (session !== sessionRef.current) return;
+        setErrorMsg(micErrorMessage(err));
+        setState("error");
+        return;
+      }
+      if (session !== sessionRef.current || finishedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      mediaStreamRef.current = stream;
+      startRecorder(stream, session);
+    },
+    [startRecorder]
+  );
+
   /* ------------------------------ motor: Web Speech ------------------------------ */
 
+  /**
+   * Web Speech abre el micrófono por su cuenta. NO se abre getUserMedia en paralelo:
+   * en Chrome Android (y la app TWA) el micrófono no se comparte, el reconocedor queda
+   * sordo y termina con "no-speech" aunque el usuario hable. El volumen del orbe se
+   * simula con los eventos de sonido del propio reconocedor.
+   */
   const startSpeech = useCallback(
-    (SpeechRecognition: any, stream: MediaStream, session: number) => {
+    (SpeechRecognition: any, session: number) => {
       setEngine("speech");
       const recognition = new SpeechRecognition();
       recognition.lang = "es-CO";
       recognition.continuous = false;
       recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
       recognitionRef.current = recognition;
       let gotAnyResult = false;
+      let heardSound = false;
+      let lastError: string | null = null;
+      let pulse: ReturnType<typeof setInterval> | null = null;
+
+      const stopPulse = () => {
+        if (pulse) clearInterval(pulse);
+        pulse = null;
+        setVolume(0);
+      };
+      const startPulse = () => {
+        if (pulse) return;
+        pulse = setInterval(() => setVolume(0.35 + Math.random() * 0.5), 120);
+      };
 
       recognition.onstart = () => {
         if (session !== sessionRef.current) return;
         setState("listening");
         logger.info("voice", "Escuchando (Web Speech)");
       };
+      recognition.onsoundstart = () => {
+        heardSound = true;
+        if (session === sessionRef.current) startPulse();
+      };
+      recognition.onspeechstart = recognition.onsoundstart;
+      recognition.onsoundend = stopPulse;
       recognition.onresult = (event: any) => {
         if (session !== sessionRef.current) return;
         gotAnyResult = true;
@@ -275,87 +339,65 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       };
       recognition.onerror = (event: any) => {
         if (session !== sessionRef.current) return;
+        lastError = event.error;
         logger.warn("voice", "Error de Web Speech", event.error);
-        if (event.error === "no-speech" || event.error === "aborted") return; // onend decide
-        if (event.error === "not-allowed") {
-          finishedRef.current = true;
-          releaseAudio();
-          setErrorMsg(
-            "El reconocimiento de voz está bloqueado en este navegador. Usa el campo de texto o prueba desde Chrome/Safari en tu móvil."
-          );
-          setState("error");
-          return;
-        }
-        // network / service-not-allowed / language-not-supported → motor roto: pasar a grabadora
-        try {
-          localStorage.setItem(SR_BROKEN_KEY, "1");
-        } catch {}
-        logger.warn("voice", "Web Speech no funciona aquí; usando grabadora + Gemini", event.error);
-        recognitionRef.current = null;
-        if (mediaStreamRef.current?.active) {
-          releaseAudioKeepStream();
-          startRecorder(stream, session);
-        } else {
-          setErrorMsg("El reconocimiento de voz del navegador falló (" + event.error + "). Escribe el gasto abajo.");
-          setState("error");
-        }
+        // la decisión (finalizar o pasar a la grabadora) se toma en onend, cuando el
+        // reconocedor ya liberó el micrófono
       };
       recognition.onend = () => {
+        stopPulse();
         if (session !== sessionRef.current || finishedRef.current) return;
-        if (recognitionRef.current === null) return; // ya se cambió de motor
-        finalize(transcriptRef.current, session);
-        if (!gotAnyResult) logger.debug("voice", "Web Speech terminó sin resultados");
+        if (recognitionRef.current !== recognition) return;
+        recognitionRef.current = null;
+
+        const text = transcriptRef.current.trim();
+        if (text) {
+          try {
+            localStorage.removeItem(SR_EMPTY_KEY);
+          } catch {}
+          finalize(text, session);
+          return;
+        }
+        if (lastError === "aborted" || stopRequestedRef.current) {
+          finalize("", session);
+          return;
+        }
+
+        // Sin texto: o el motor no sirve aquí (network, audio-capture, service-not-allowed,
+        // not-allowed en algunos WebView…) o no captó la voz. En ambos casos se reintenta en
+        // la misma sesión con grabadora + Gemini, que no depende del servicio de Google.
+        const hardFailure = !!lastError && lastError !== "no-speech";
+        let empties = 0;
+        try {
+          empties = Number(localStorage.getItem(SR_EMPTY_KEY) || "0") + 1;
+          localStorage.setItem(SR_EMPTY_KEY, String(empties));
+          if (hardFailure || empties >= 2) localStorage.setItem(SR_BROKEN_KEY, "1");
+        } catch {}
+        logger.warn("voice", "Web Speech sin texto; usando grabadora + Gemini", {
+          error: lastError,
+          heardSound,
+          gotAnyResult,
+          empties,
+        });
+        setTranscript("");
+        void startRecorderSession(session);
       };
 
       recognition.start();
-      startAnalyser(stream);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [finalize, releaseAudio, startAnalyser, startRecorder]
+    [finalize, startRecorderSession]
   );
-
-  /** Detiene solo el analizador/timers sin cerrar el stream (al cambiar de motor). */
-  function releaseAudioKeepStream() {
-    clearTimers();
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current.close().catch(() => {});
-    }
-    audioContextRef.current = null;
-  }
 
   /* ------------------------------ API pública ------------------------------ */
 
   const startListening = useCallback(async () => {
     const session = ++sessionRef.current;
     finishedRef.current = false;
+    stopRequestedRef.current = false;
     setErrorMsg(null);
     setTranscript("");
     transcriptRef.current = "";
     setParsedResult(null);
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setErrorMsg("Este navegador no permite usar el micrófono (¿conexión no segura?). Escribe el gasto abajo.");
-      setState("error");
-      logger.warn("voice", "mediaDevices no disponible");
-      return;
-    }
-
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err: any) {
-      logger.warn("voice", "Micrófono no disponible", err);
-      setErrorMsg(micErrorMessage(err));
-      setState("error");
-      return;
-    }
-    if (session !== sessionRef.current) {
-      stream.getTracks().forEach((t) => t.stop());
-      return;
-    }
-    mediaStreamRef.current = stream;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     let broken = false;
@@ -365,14 +407,16 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
     if (SpeechRecognition && !broken) {
       try {
-        startSpeech(SpeechRecognition, stream, session);
+        // se arranca de forma síncrona, dentro del gesto del usuario
+        startSpeech(SpeechRecognition, session);
         return;
       } catch (e) {
+        recognitionRef.current = null;
         logger.warn("voice", "Web Speech no arrancó", e);
       }
     }
-    startRecorder(stream, session);
-  }, [startRecorder, startSpeech]);
+    await startRecorderSession(session);
+  }, [startRecorderSession, startSpeech]);
 
   const stopListening = useCallback(() => {
     logger.debug("voice", "Detener escucha");
@@ -382,6 +426,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       return;
     }
     if (recognitionRef.current) {
+      stopRequestedRef.current = true;
       try {
         recognitionRef.current.stop(); // onend finaliza una sola vez
         return;
@@ -416,6 +461,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   const resetEngineFlag = useCallback(() => {
     try {
       localStorage.removeItem(SR_BROKEN_KEY);
+      localStorage.removeItem(SR_EMPTY_KEY);
     } catch {}
   }, []);
 
