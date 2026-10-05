@@ -28,6 +28,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // 1b. Digital Asset Links must stay reachable for Google's verifier (bypasses IP whitelist)
+  if (pathname === "/.well-known/assetlinks.json") {
+    return NextResponse.next();
+  }
+
   // 2. IP Whitelisting Layer (Optional Vercel config: ALLOWED_IPS=181.53.99.92,...)
   const allowedIpsEnv = process.env.ALLOWED_IPS;
   if (allowedIpsEnv && allowedIpsEnv.trim() !== "") {
