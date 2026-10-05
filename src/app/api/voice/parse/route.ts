@@ -1,7 +1,11 @@
+import { requireActiveUser } from "@/lib/auth/session";
 import { NextRequest, NextResponse } from "next/server";
 import { parseVoiceFinancialInput } from "@/lib/ai/gemini-client";
 
 export async function POST(req: NextRequest) {
+  // Gasta cuota de IA: solo usuarios con cuenta activa (no basta con una sesión de registro público)
+  const guard = await requireActiveUser();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
   const started = Date.now();
   try {
     const body = await req.json();
