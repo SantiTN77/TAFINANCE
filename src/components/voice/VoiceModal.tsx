@@ -8,7 +8,7 @@ import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
 import { useFinance } from "@/hooks/useFinance";
 import { ParsedVoiceTransaction } from "@/types/finance";
 import { financeStore } from "@/lib/storage/finance-store";
-import { matchCategory, todayStr } from "@/lib/finance/calc";
+import { matchCategory, parseAmount, todayStr } from "@/lib/finance/calc";
 import { logger } from "@/lib/debug/logger";
 
 interface VoiceModalProps {
@@ -67,7 +67,7 @@ export function VoiceModal({ isOpen, onClose, onTransactionSaved }: VoiceModalPr
   }, [isOpen]);
 
   const handleSave = async (result: ParsedVoiceTransaction) => {
-    const numeric = parseFloat(amount.replace(/[^0-9.]/g, ""));
+    const numeric = parseAmount(amount);
     if (!numeric || numeric <= 0) return;
     setIsSaving(true);
     try {
@@ -101,7 +101,7 @@ export function VoiceModal({ isOpen, onClose, onTransactionSaved }: VoiceModalPr
 
   const hint = {
     idle: "Toca el orbe y habla. Ej: «Gasté 45 mil en comida con amigos»",
-    listening: engine === "recorder" ? "Grabando… toca el orbe para terminar" : "Escuchando… di tu gasto o ingreso",
+    listening: engine === "recorder" ? "Grabando… di tu gasto y toca el orbe al terminar" : "Escuchando… di tu gasto o ingreso",
     processing: "Interpretando y categorizando…",
     success: "Revisa los datos y confirma",
     error: errorMsg || "Hubo un problema. Intenta de nuevo.",

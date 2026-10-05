@@ -10,6 +10,7 @@ import {
   buildSummary,
   cardStatus,
   computeBalances,
+  computeLedger,
   floatDaysFor,
   matchCategory,
   upcomingRecurring,
@@ -70,8 +71,9 @@ check("apertura + flujo = cierre", (sum.openingBalance ?? 0) + (sum.netFlow ?? 0
 
 // 3. Transferencia a bolsillo no cambia el patrimonio
 const withPocket = [...flow, tx({ type: "TRANSFER", amount: 100000, account_id: "bank", pocket_id: "p" })];
-const bal2 = computeBalances(accounts, withPocket);
-const sum2 = buildSummary(bal2, categories, withPocket, [], [{ ...pockets[0], current_amount: 100000 }], "2026-10");
+const led2 = computeLedger(accounts, withPocket, pockets);
+check("bolsillo derivado del aporte", led2.pockets[0].current_amount === 100000, led2.pockets);
+const sum2 = buildSummary(led2.accounts, categories, withPocket, [], led2.pockets, "2026-10");
 check("aporte a bolsillo conserva patrimonio", sum2.totalBalance === 465000, sum2.totalBalance);
 
 // 4. Historial diario termina en el patrimonio actual
