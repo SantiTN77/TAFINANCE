@@ -127,29 +127,32 @@ export const ScanView: React.FC<ScanViewProps> = ({
       const matchedCat = matchCategory(categories, category, "EXPENSE", `${merchant} ${items.map((i) => i.name).join(" ")}`);
       const matchedAcc = accounts.find((a) => a.type !== "credit") || accounts[0];
 
-      // Add expense transaction
-      await financeStore.addTransaction({
+      // Una transacción por bolsillo (el bolsillo paga hasta su saldo; el saldo se deriva del historial)
+      // y otra por lo no asignado (impuestos, propinas, ítems sin bolsillo).
+      const byPocket = new Map<string, number>();
+      for (const item of items) {
+        const targetPocket = pockets.find((p) => p.name === item.pocketName);
+        if (targetPocket && item.price > 0) byPocket.set(targetPocket.id, (byPocket.get(targetPocket.id) || 0) + item.price);
+      }
+      let assigned = 0;
+      const base = {
         account_id: matchedAcc?.id,
         category_id: matchedCat?.id,
-        type: "EXPENSE",
-        amount: total,
+        type: "EXPENSE" as const,
         currency: "COP",
         description: `Factura: ${merchant} (${items.length} ítems)`,
         merchant,
         raw_prompt: `Escaneo OCR: ${items.length} ítems en ${merchant}`,
         date,
-      });
-
-      // Distribute / deduct from pockets if any items are assigned
-      for (const item of items) {
-        const targetPocket = pockets.find((p) => p.name === item.pocketName);
-        if (targetPocket && item.price > 0) {
-          // Deduct from pocket
-          await financeStore.updatePocket(targetPocket.id, {
-            current_amount: Math.max(0, targetPocket.current_amount - item.price),
-          });
-        }
+      };
+      for (const [pocketId, sum] of byPocket) {
+        const amount = Math.min(sum, total - assigned);
+        if (amount <= 0) continue;
+        assigned += amount;
+        await financeStore.addTransaction({ ...base, amount, pocket_id: pocketId });
       }
+      const rest = Math.round((total - assigned) * 100) / 100;
+      if (rest > 0) await financeStore.addTransaction({ ...base, amount: rest });
 
       setIsConfirmed(true);
       onShowToast(`¡Factura guardada y distribuida en bolsillos!`);
