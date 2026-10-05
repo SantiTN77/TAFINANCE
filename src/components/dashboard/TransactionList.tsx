@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Transaction, Category, Account } from "@/types/finance";
-import { Search, ArrowDownRight, ArrowUpRight, ArrowLeftRight, Trash2, Mic, Repeat, CreditCard } from "lucide-react";
+import { Search, ArrowDownRight, ArrowUpRight, ArrowLeftRight, Trash2, Mic, Repeat, CreditCard, Pencil } from "lucide-react";
 import { useApp } from "@/lib/context/AppContext";
 import { todayStr, addDays, toDateStr } from "@/lib/finance/calc";
 
@@ -12,6 +12,7 @@ interface TransactionListProps {
   categories: Category[];
   accounts: Account[];
   onDeleteTransaction: (id: string) => void;
+  onEditTransaction?: (tx: Transaction) => void;
 }
 
 type Filter = "ALL" | "EXPENSE" | "INCOME" | "TRANSFER";
@@ -24,7 +25,7 @@ function dayLabel(date: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "short" });
 }
 
-export function TransactionList({ transactions, categories, accounts, onDeleteTransaction }: TransactionListProps) {
+export function TransactionList({ transactions, categories, accounts, onDeleteTransaction, onEditTransaction }: TransactionListProps) {
   const { formatMoney } = useApp();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<Filter>("ALL");
@@ -116,7 +117,13 @@ export function TransactionList({ transactions, categories, accounts, onDeleteTr
                   const Icon = isTransfer ? ArrowLeftRight : isIncome ? ArrowUpRight : ArrowDownRight;
                   return (
                     <GlassCard key={tx.id} className="p-3.5 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-3 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => onEditTransaction?.(tx)}
+                        disabled={!onEditTransaction}
+                        className="flex items-center gap-3 min-w-0 text-left flex-1"
+                        aria-label={`Editar ${tx.merchant || tx.description}`}
+                      >
                         <div className={`w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 border ${tone}`}>
                           <Icon className="w-4 h-4" />
                         </div>
@@ -144,7 +151,7 @@ export function TransactionList({ transactions, categories, accounts, onDeleteTr
                             )}
                           </div>
                         </div>
-                      </div>
+                      </button>
 
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <span
@@ -168,6 +175,16 @@ export function TransactionList({ transactions, categories, accounts, onDeleteTr
                             ¿Borrar?
                           </button>
                         ) : (
+                          <>
+                          {onEditTransaction && (
+                            <button
+                              onClick={() => onEditTransaction(tx)}
+                              className="p-2 rounded-lg text-slate-500 hover:text-emerald-400 transition-colors"
+                              aria-label="Editar movimiento"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setConfirmId(tx.id)}
                             className="p-2 rounded-lg text-slate-500 hover:text-rose-400 transition-colors"
@@ -175,6 +192,7 @@ export function TransactionList({ transactions, categories, accounts, onDeleteTr
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                          </>
                         )}
                       </div>
                     </GlassCard>
