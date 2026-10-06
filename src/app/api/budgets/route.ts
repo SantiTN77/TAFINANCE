@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { financeStore } from "@/lib/storage/server-store";
+import { storeForRequest } from "@/lib/storage/server-store";
 
 export async function GET() {
+  const scoped = await storeForRequest();
+  if (!scoped.ok) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
+  const financeStore = scoped.store;
   try {
     const budgets = await financeStore.getBudgets();
     return NextResponse.json(budgets);
@@ -11,6 +14,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const scoped = await storeForRequest();
+  if (!scoped.ok) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
+  const financeStore = scoped.store;
   try {
     const body = await req.json();
     const { categoryId, monthlyLimit, month } = body;

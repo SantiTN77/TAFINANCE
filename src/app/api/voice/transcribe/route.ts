@@ -1,3 +1,4 @@
+import { requireActiveUser } from "@/lib/auth/session";
 import { NextRequest, NextResponse } from "next/server";
 import { transcribeAndParse } from "@/lib/ai/gemini-client";
 
@@ -8,6 +9,9 @@ export const maxDuration = 30;
  * el cliente graba el audio y lo envía aquí; Gemini lo transcribe y extrae el movimiento.
  */
 export async function POST(req: NextRequest) {
+  // Gasta cuota de IA: solo usuarios con cuenta activa (no basta con una sesión de registro público)
+  const guard = await requireActiveUser();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
   const started = Date.now();
   try {
     const body = await req.json();

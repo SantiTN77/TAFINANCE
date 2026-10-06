@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionToken, verifyPayload } from "@/lib/auth/security";
+import { verifyPayload } from "@/lib/auth/security";
+import { mintOwnerSession } from "@/lib/auth/owner-session";
 import { DeviceCredential, requestOrigin, verifyAssertion } from "@/lib/auth/webauthn-server";
 
 /**
@@ -38,15 +39,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Verificación biométrica fallida" }, { status: 401 });
     }
 
-    const token = await createSessionToken(60);
+    const minted = await mintOwnerSession();
+    if (!minted.ok) return NextResponse.json({ success: false, error: minted.error }, { status: minted.status });
     const response = NextResponse.json({ success: true, message: "Acceso concedido" });
-    response.cookies.set("tafinance_session", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 24 * 60 * 60,
-      path: "/",
-    });
     response.cookies.set("tafinance_chal", "", { path: "/api/auth/biometric", maxAge: 0 }); // un solo uso
     return response;
   } catch {

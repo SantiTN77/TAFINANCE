@@ -12,10 +12,16 @@ import { serverDb } from "@/lib/supabase/server";
  * el login no se intenta.
  */
 
-const RULES: { key: (ip: string) => string; max: number; lockSeconds: number }[] = [
+type Rule = { key: (ip: string) => string; max: number; lockSeconds: number };
+const BASE_RULES: Rule[] = [
   { key: (ip) => `pin:ip:${ip}`, max: 5, lockSeconds: 60 },
   { key: () => "pin:global", max: 20, lockSeconds: 300 },
 ];
+/** Con email (login con contraseña) se limita además por cuenta: frena el ataque distribuido a un usuario. */
+const rulesFor = (subject?: string): Rule[] =>
+  subject
+    ? [...BASE_RULES, { key: () => `login:user:${subject.toLowerCase().slice(0, 200)}`, max: 8, lockSeconds: 120 }]
+    : BASE_RULES;
 
 export type ThrottleCheck =
   | { allowed: true }
@@ -25,7 +31,7 @@ export type ThrottleCheck =
 /* ---------- respaldo en memoria: SOLO para `next dev` sin Supabase ---------- */
 const memory = new Map<string, { fails: number; lockedUntil: number }>();
 
-function memoryHit(ip: string): number {
+function memoryHit(ip: string, RULES: Rule[]): number {
   const now = Date.now();
   const wait = Math.max(0, ...RULES.map((r) => Math.ceil(((memory.get(r.key(ip))?.lockedUntil || 0) - now) / 1000)));
   if (wait > 0) return wait;
@@ -44,11 +50,12 @@ const devFallback = () => process.env.NODE_ENV === "development";
  * Registra un intento ANTES de comprobar el PIN (atómico en la BD, así que peticiones en
  * paralelo no se saltan el límite). Si el PIN resulta correcto, llama a `resetPinThrottle`.
  */
-export async function hitPinThrottle(ip: string): Promise<ThrottleCheck> {
+export async function hitPinThrottle(ip: string, subject?: string): Promise<ThrottleCheck> {
+  const RULES = rulesFor(subject);
   const db = serverDb();
   if (!db) {
     if (!devFallback()) return { allowed: false, unavailable: true };
-    const wait = memoryHit(ip);
+    const wait = memoryHit(ip, RULES);
     return wait > 0 ? { allowed: false, retryAfterSec: wait } : { allowed: true };
   }
   const { data, error } = await db.rpc("taf_throttle_hit", {
@@ -64,8 +71,8 @@ export async function hitPinThrottle(ip: string): Promise<ThrottleCheck> {
   return wait > 0 ? { allowed: false, retryAfterSec: wait } : { allowed: true };
 }
 
-export async function resetPinThrottle(ip: string): Promise<void> {
-  const keys = RULES.map((r) => r.key(ip));
+export async function resetPinThrottle(ip: string, subject?: string): Promise<void> {
+  const keys = rulesFor(subject).map((r) => r.key(ip));
   const db = serverDb();
   if (!db) {
     keys.forEach((k) => memory.delete(k));

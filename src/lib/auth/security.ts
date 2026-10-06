@@ -1,4 +1,5 @@
-// Web Crypto API HMAC-SHA256 Token generator and validator (Edge-compatible)
+// Web Crypto API HMAC-SHA256: cookies firmadas del dispositivo y desafíos WebAuthn.
+// Las sesiones de usuario las gestiona Supabase Auth (ver session.ts).
 
 // Solo para `next dev`: en cualquier otro entorno falta el secreto = nadie entra (falla cerrado).
 const DEV_ONLY_SECRET = "tafinance-dev-only-secret-not-for-production";
@@ -68,56 +69,6 @@ function base64UrlDecode(str: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
-}
-
-export async function createSessionToken(
-  daysValid: number = 30
-): Promise<string> {
-  const secret = getAuthSecret();
-  const exp = Date.now() + daysValid * 24 * 60 * 60 * 1000;
-  const payload = JSON.stringify({ exp, valid: true });
-  const payloadEnc = new TextEncoder().encode(payload);
-  const payloadB64 = base64UrlEncode(payloadEnc);
-
-  const key = await getCryptoKey(secret);
-  const sigBuffer = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(payloadB64)
-  );
-  const sigB64 = base64UrlEncode(sigBuffer);
-
-  return `${payloadB64}.${sigB64}`;
-}
-
-export async function verifySessionToken(token: string | undefined | null): Promise<boolean> {
-  if (!token || !token.includes(".")) return false;
-  try {
-    const [payloadB64, sigB64] = token.split(".");
-    const secret = getAuthSecret();
-    const key = await getCryptoKey(secret);
-
-    const sigBytes = base64UrlDecode(sigB64);
-    const isValid = await crypto.subtle.verify(
-      "HMAC",
-      key,
-      sigBytes as unknown as BufferSource,
-      new TextEncoder().encode(payloadB64)
-    );
-
-    if (!isValid) return false;
-
-    const payloadJson = new TextDecoder().decode(base64UrlDecode(payloadB64));
-    const payload = JSON.parse(payloadJson);
-
-    if (!payload.exp || Date.now() > payload.exp) {
-      return false;
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /* ------------------------------------------------------------------ */

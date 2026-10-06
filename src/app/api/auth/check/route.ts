@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken } from "@/lib/auth/security";
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
 
-export async function GET(req: NextRequest) {
-  const token = req.cookies.get("tafinance_session")?.value;
-  const isAuthenticated = await verifySessionToken(token);
-  return NextResponse.json({ authenticated: isAuthenticated });
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const s = await getSession();
+  return NextResponse.json({ authenticated: !!s && s.status === "active" });
 }

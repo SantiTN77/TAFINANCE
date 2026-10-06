@@ -47,14 +47,27 @@ pnpm test
 
 ## Servidor MCP (opcional)
 
-`/api/mcp` queda deshabilitado hasta definir `MCP_TOKEN`; los clientes deben enviar `Authorization: Bearer <MCP_TOKEN>` (o `?token=`).
+`/api/mcp` queda deshabilitado hasta definir `MCP_TOKEN` y `MCP_USER_ID` (uuid del usuario dueño de los datos); los clientes deben enviar `Authorization: Bearer <MCP_TOKEN>` (o `?token=`).
+
+## Multiusuario y administración
+
+- Cada usuario entra con correo y contraseña (Supabase Auth) y solo ve sus datos: RLS por `auth.uid()` con claves `(user_id, id)` y FKs compuestas (`supabase/migrations/20261005*.sql`). Desactiva "Allow new users to sign up" en Supabase; si alguien se registra igual queda `pending`, sin acceso a datos.
+- El panel `/admin` (solo rol admin y sesión iniciada con contraseña) crea usuarios, los deshabilita, cambia roles, restablece contraseñas y borra cuentas. Nunca muestra datos financieros ajenos. Todo queda en `admin_audit`.
+- PIN y huella son un desbloqueo rápido solo del dueño (`TAFINANCE_OWNER_EMAIL`) y no dan acceso al panel admin.
+- Prueba de aislamiento (Postgres local, no toca Supabase): `TEST_DATABASE_URL=postgresql:///tafmt ./scripts/test-rls.sh`.
+
+### Orden de despliegue (migración desde una sola bóveda)
+
+1. Aplicar `20261005a` (aditiva, segura en cualquier momento).
+2. Crear en Supabase Auth el usuario dueño y ejecutar `select public.taf_assign_legacy_data('<uuid>')`: le asigna todos los datos actuales y lo hace admin. Comprobar los conteos devueltos.
+3. Definir en Vercel `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `TAFINANCE_OWNER_EMAIL` y `MCP_USER_ID`; aplicar `20261005c` y desplegar el código **juntos** (el código nuevo no funciona con el esquema anterior y viceversa).
 
 ## Seguridad
 
-- Falla cerrado: sin `TAFINANCE_PIN` (mín. 4) y `TAFINANCE_SECRET` (mín. 32 caracteres) nadie puede entrar fuera de `next dev`.
-- La biometría se valida en el servidor (firma WebAuthn) y queda ligada al dispositivo mediante una cookie firmada.
-- El navegador no habla con Supabase: lee y escribe por `/api/data` (protegido por la sesión). Solo el servidor tiene `SUPABASE_SERVICE_ROLE_KEY`; las tablas tienen RLS sin políticas para `anon`/`authenticated` (`supabase/migrations/20261004b_lockdown_rls.sql`).
-- Los intentos de PIN se limitan en la BD (`auth_throttle`): 5 por IP y 20 globales, con bloqueo creciente. La biometría no se ve afectada.
+- Falla cerrado: sin `TAFINANCE_PIN` (mín. 4) y `TAFINANCE_SECRET` (mín. 32 caracteres) no hay desbloqueo rápido y las cookies de dispositivo no se firman.
+- La biometría se valida en el servidor (firma WebAuthn), queda ligada al dispositivo mediante una cookie firmada y solo la puede registrar la cuenta del dueño.
+- El navegador solo conoce la clave anónima, que sin el JWT de un usuario activo no abre ninguna tabla. `SUPABASE_SERVICE_ROLE_KEY` es solo del servidor (admin, cron, limitador, MCP).
+- Los intentos de acceso se limitan en la BD (`auth_throttle`): 5 por IP, 20 globales y 8 por correo, con bloqueo creciente.
 
 ## Licencia
 

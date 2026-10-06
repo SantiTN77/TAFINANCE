@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { financeStore } from "@/lib/storage/server-store";
+import { storeForRequest } from "@/lib/storage/server-store";
 import { monthKey } from "@/lib/finance/calc";
 
 export async function GET(req: NextRequest) {
+  const scoped = await storeForRequest();
+  if (!scoped.ok) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
+  const financeStore = scoped.store;
   try {
     const { searchParams } = new URL(req.url);
     const month = searchParams.get("month") || monthKey();

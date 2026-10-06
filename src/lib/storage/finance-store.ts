@@ -63,6 +63,7 @@ const LS = {
   pockets: "tafinance_pockets",
   budgets: "tafinance_budgets",
   outbox: "tafinance_outbox",
+  owner: "tafinance_owner",
 };
 
 const uid = (prefix: string) =>
@@ -114,7 +115,7 @@ const isDisabled = (r: unknown): r is Disabled => !!r && typeof r === "object" &
 const BATCH_SIZE = 100;
 const POLL_MS = 30_000;
 
-class FinanceStore {
+export class FinanceStore {
   private categories: Category[] = [...DEFAULT_CATEGORIES];
   private accounts: Account[] = [...DEFAULT_ACCOUNTS];
   private transactions: Transaction[] = [];
@@ -146,6 +147,45 @@ class FinanceStore {
     if (this.isBrowser) return;
     this.backend = backend;
     this.remoteMode = "unknown";
+  }
+
+  /**
+   * Navegador: la caché local pertenece a UN usuario. Si la sesión actual es de otro (o no
+   * hay marca previa pero sí datos), se descarta antes de sincronizar para no mezclar ni mostrar
+   * datos ajenos en un dispositivo compartido.
+   */
+  async bindUser(): Promise<void> {
+    if (!this.isBrowser) return;
+    try {
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!res.ok) return;
+      const { id } = (await res.json()) as { id?: string };
+      if (!id) return;
+      const prev = localStorage.getItem(LS.owner);
+      if (prev !== id) {
+        this.wipeLocal();
+        localStorage.setItem(LS.owner, id);
+      }
+    } catch (e) {
+      logger.warn("store", "No se pudo verificar el usuario de la caché", e);
+    }
+  }
+
+  /** Borra la caché local (memoria + localStorage), p. ej. al cerrar sesión. */
+  wipeLocal() {
+    if (!this.isBrowser) return;
+    this.categories = [...DEFAULT_CATEGORIES];
+    this.accounts = [...DEFAULT_ACCOUNTS];
+    this.transactions = [];
+    this.pockets = [];
+    this.budgets = [];
+    this.outbox = [];
+    this.hydrated = false;
+    try {
+      Object.values(LS).forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    this.recomputeBalances();
+    this.emit();
   }
 
   /* ------------------------------ suscripción ------------------------------ */
@@ -198,7 +238,7 @@ class FinanceStore {
     this.pollTimer = setInterval(() => {
       if (document.visibilityState === "visible" && this.remoteMode !== "off") void this.pull();
     }, POLL_MS);
-    void this.sync();
+    void this.bindUser().then(() => this.sync());
   }
 
   /* ------------------------------ persistencia local ------------------------------ */

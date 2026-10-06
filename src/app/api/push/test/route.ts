@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureVapid, sendPush } from "@/lib/push/server";
+import { requireActiveUser } from "@/lib/auth/session";
 
 /** Envía una notificación de prueba a la suscripción indicada (requiere sesión de la bóveda). */
 export async function POST(req: NextRequest) {
+  const guard = await requireActiveUser();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
   if (!ensureVapid()) return NextResponse.json({ error: "VAPID no configurado" }, { status: 503 });
   const { subscription } = await req.json();
   const endpoint = subscription?.endpoint;

@@ -88,6 +88,7 @@ function AppContent() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {}
+    financeStore.wipeLocal(); // la caché local es del usuario que sale
     window.location.href = "/lock";
   };
 

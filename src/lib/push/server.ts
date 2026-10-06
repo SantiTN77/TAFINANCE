@@ -11,6 +11,7 @@ export interface PushReminder {
 
 export interface SubscriptionRow {
   id: string;
+  user_id: string;
   endpoint: string;
   p256dh: string;
   auth: string;
