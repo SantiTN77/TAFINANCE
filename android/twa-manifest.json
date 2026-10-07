@@ -1,0 +1,63 @@
+{
+  "packageId": "app.tafinance",
+  "host": "tafinance.vercel.app",
+  "name": "TAFINANCE",
+  "launcherName": "TAFINANCE",
+  "display": "standalone",
+  "themeColor": "#070A11",
+  "themeColorDark": "#070A11",
+  "navigationColor": "#070A11",
+  "navigationColorDark": "#070A11",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#070A11",
+  "enableNotifications": true,
+  "startUrl": "/app",
+  "iconUrl": "https://tafinance.vercel.app/icon-512.png",
+  "maskableIconUrl": "https://tafinance.vercel.app/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "tafinance"
+  },
+  "appVersionName": "2.1.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Registrar con voz",
+      "shortName": "Voz",
+      "url": "https://tafinance.vercel.app/app?action=voice",
+      "chosenIconUrl": "https://tafinance.vercel.app/icon-192.png"
+    },
+    {
+      "name": "Nuevo movimiento",
+      "shortName": "Nuevo",
+      "url": "https://tafinance.vercel.app/app?action=add",
+      "chosenIconUrl": "https://tafinance.vercel.app/icon-192.png"
+    }
+  ],
+  "generatorApp": "unknown",
+  "webManifestUrl": "https://tafinance.vercel.app/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://tafinance.vercel.app/",
+  "minSdkVersion": 24,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "appVersion": "2.1.0"
+}

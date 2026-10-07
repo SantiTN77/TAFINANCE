@@ -1,35 +1,41 @@
 {
   "name": "tafinance",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "mcp": "tsx mcp/server.ts"
+    "mcp": "tsx mcp/server.ts",
+    "test": "tsx tests/finance-calc.test.ts && tsx tests/finance-consistency.test.ts && tsx tests/voice-parser.test.ts && tsx tests/wav.test.ts && tsx tests/security.test.ts && tsx tests/tx-edit.test.ts && tsx tests/pocket-pay.test.ts",
+    "icons": "node scripts/gen-icons.mjs",
+    "android:debug": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
-    "next": "15.2.1",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
+    "@google/genai": "^2.3.0",
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.1",
+    "clsx": "^2.1.1",
     "framer-motion": "^12.4.7",
     "lucide-react": "^0.475.0",
-    "clsx": "^2.1.1",
+    "next": "15.3.9",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "tailwind-merge": "^3.0.1",
-    "@google/genai": "^2.3.0",
-    "@supabase/supabase-js": "^2.49.1",
-    "@supabase/ssr": "^0.5.2",
-    "@modelcontextprotocol/sdk": "^1.6.0"
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
-    "tailwindcss": "^3.4.17",
-    "postcss": "^8.5.3",
+    "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.20",
-    "tsx": "^4.19.3"
+    "postcss": "^8.5.3",
+    "sharp": "^0.35.5",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
   }
 }

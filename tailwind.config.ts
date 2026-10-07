@@ -11,6 +11,32 @@ const config: Config = {
     extend: {
       colors: {
         background: "#070A11",
+        // Tokens de tema: cambian con html.light / html.oled (ver globals.css)
+        app: "rgb(var(--c-app) / <alpha-value>)",
+        card: "rgb(var(--c-card) / <alpha-value>)",
+        inset: "rgb(var(--c-inset) / <alpha-value>)",
+        white: "rgb(var(--c-ink) / <alpha-value>)",
+        "on-accent": "#ffffff",
+        mint: "rgb(var(--c-mint) / <alpha-value>)",
+        sky2: "rgb(var(--c-sky) / <alpha-value>)",
+        indigo2: "rgb(var(--c-indigo) / <alpha-value>)",
+        slate: {
+          100: "rgb(var(--s-100) / <alpha-value>)",
+          200: "rgb(var(--s-200) / <alpha-value>)",
+          300: "rgb(var(--s-300) / <alpha-value>)",
+          400: "rgb(var(--s-400) / <alpha-value>)",
+          500: "rgb(var(--s-500) / <alpha-value>)",
+          600: "rgb(var(--s-600) / <alpha-value>)",
+          700: "rgb(var(--s-700) / <alpha-value>)",
+          800: "rgb(var(--s-800) / <alpha-value>)",
+          900: "rgb(var(--s-900) / <alpha-value>)",
+        },
+        emerald: { 300: "rgb(var(--a-emerald-300) / <alpha-value>)", 400: "rgb(var(--a-emerald-400) / <alpha-value>)" },
+        teal: { 300: "rgb(var(--a-teal-300) / <alpha-value>)", 400: "rgb(var(--a-teal-400) / <alpha-value>)" },
+        cyan: { 300: "rgb(var(--a-cyan-300) / <alpha-value>)", 400: "rgb(var(--a-cyan-400) / <alpha-value>)" },
+        rose: { 300: "rgb(var(--a-rose-300) / <alpha-value>)", 400: "rgb(var(--a-rose-400) / <alpha-value>)" },
+        amber: { 300: "rgb(var(--a-amber-300) / <alpha-value>)", 400: "rgb(var(--a-amber-400) / <alpha-value>)" },
+        violet: { 300: "rgb(var(--a-violet-300) / <alpha-value>)", 400: "rgb(var(--a-violet-400) / <alpha-value>)" },
         surface: {
           50: "#1A2234",
           100: "#141B2D",

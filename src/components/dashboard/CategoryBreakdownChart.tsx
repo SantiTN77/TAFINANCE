@@ -2,7 +2,7 @@
 
 import React from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { PieChart, Utensils, Car, Sparkles, Zap, ShoppingBag, HeartPulse, Circle } from "lucide-react";
+import { PieChart, Utensils, Car, Sparkles, Zap, ShoppingBag, HeartPulse, Circle, ShoppingCart, Home, Laptop, Coffee, Briefcase, TrendingUp } from "lucide-react";
 
 interface CategoryBreakdownChartProps {
   categories: {
@@ -22,6 +22,12 @@ const ICON_MAP: Record<string, any> = {
   Zap,
   ShoppingBag,
   HeartPulse,
+  ShoppingCart,
+  Home,
+  Laptop,
+  Coffee,
+  Briefcase,
+  TrendingUp,
 };
 
 export function CategoryBreakdownChart({ categories }: CategoryBreakdownChartProps) {
@@ -29,7 +35,7 @@ export function CategoryBreakdownChart({ categories }: CategoryBreakdownChartPro
     return (
       <GlassCard className="p-6 text-center">
         <PieChart className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-        <p className="text-xs text-slate-400">Aún no hay gastos registrados este mes.</p>
+        <p className="text-xs text-slate-400">Aún no hay gastos registrados en este mes.</p>
       </GlassCard>
     );
   }
@@ -62,7 +68,7 @@ export function CategoryBreakdownChart({ categories }: CategoryBreakdownChartPro
               cx={size / 2}
               cy={size / 2}
               r={radius}
-              stroke="rgba(255,255,255,0.06)"
+              stroke="rgb(var(--c-ink) / 0.07)"
               strokeWidth={strokeWidth}
               fill="transparent"
             />
@@ -81,7 +87,7 @@ export function CategoryBreakdownChart({ categories }: CategoryBreakdownChartPro
                   strokeWidth={strokeWidth}
                   strokeDasharray={strokeDasharray}
                   strokeDashoffset={strokeDashoffset}
-                  strokeLinecap="round"
+                  strokeLinecap="butt"
                   fill="transparent"
                   className="transition-all duration-500 hover:opacity-80"
                 />
@@ -107,7 +113,7 @@ export function CategoryBreakdownChart({ categories }: CategoryBreakdownChartPro
                   >
                     <IconComponent className="w-3 h-3" style={{ color: cat.color }} />
                   </div>
-                  <span className="text-slate-300 truncate max-w-[130px]">{cat.categoryName}</span>
+                  <span className="text-slate-300 truncate max-w-[130px] sm:max-w-[170px]">{cat.categoryName}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-white">

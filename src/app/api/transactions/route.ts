@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { financeStore } from "@/lib/storage/finance-store";
+import { todayStr, monthKey } from "@/lib/finance/calc";
+import { storeForRequest } from "@/lib/storage/server-store";
 
 export async function GET(req: NextRequest) {
+  const scoped = await storeForRequest();
+  if (!scoped.ok) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
+  const financeStore = scoped.store;
   try {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type");
@@ -20,6 +24,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const scoped = await storeForRequest();
+  if (!scoped.ok) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
+  const financeStore = scoped.store;
   try {
     const body = await req.json();
     const { type, amount, description, category_id, account_id, merchant, date, raw_prompt } = body;
@@ -43,7 +50,7 @@ export async function POST(req: NextRequest) {
       raw_prompt,
       category_id: category_id || categories[0]?.id,
       account_id: account_id || accounts[0]?.id,
-      date: date || new Date().toISOString().split("T")[0],
+      date: date || todayStr(),
     });
 
     return NextResponse.json(newTx, { status: 201 });
