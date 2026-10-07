@@ -68,6 +68,9 @@ function AppContent() {
   const handleTransferToPocket = async (pocketId: string, amount: number) => {
     return financeStore.transferToPocket(pocketId, amount);
   };
+  const handlePayFromPocket = async (pocketId: string, accountId: string, amount: number) => {
+    return financeStore.transferFromPocket(pocketId, accountId, amount);
+  };
   const handleDeleteTransaction = async (id: string) => {
     await financeStore.deleteTransaction(id);
     showToast("Movimiento eliminado");
@@ -202,6 +205,8 @@ function AppContent() {
                     onAddPocket={handleAddPocket}
                     onDeletePocket={handleDeletePocket}
                     onTransferToPocket={handleTransferToPocket}
+                    accounts={accounts}
+                    onPayFromPocket={handlePayFromPocket}
                     onShowToast={showToast}
                   />
                 ) : (

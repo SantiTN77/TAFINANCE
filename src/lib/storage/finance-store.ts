@@ -671,6 +671,33 @@ export class FinanceStore {
     return true;
   }
 
+  /**
+   * Paga/retira desde un bolsillo hacia una cuenta (p. ej. pagar la tarjeta con el bolsillo de gastos).
+   * Es un traslado interno: no cuenta como gasto. Solo mueve lo que el bolsillo tiene.
+   */
+  async transferFromPocket(pocketId: string, toAccountId: string, amount: number, description?: string): Promise<boolean> {
+    await this.ready();
+    const pocket = this.pockets.find((p) => p.id === pocketId);
+    const to = this.accounts.find((a) => a.id === toAccountId);
+    if (!pocket || !to || !(amount > 0)) return false;
+    if (amount > Number(pocket.current_amount || 0)) return false;
+    const tx = this.buildTx({
+      type: "TRANSFER",
+      amount,
+      currency: "COP",
+      description: description || `${to.type === "credit" ? "Pago de tarjeta" : "Retiro"} desde bolsillo: ${pocket.name} → ${to.name}`,
+      pocket_id: pocketId,
+      to_account_id: toAccountId,
+      date: todayStr(),
+    });
+    // El origen es el bolsillo: no se liga a una cuenta de origen (evita mostrar un banco que no puso el dinero)
+    tx.account_id = undefined;
+    this.transactions.unshift(tx);
+    this.commit([this.op("transactions", tx)]);
+    await this.settle();
+    return true;
+  }
+
   /* ------------------------------ transacciones ------------------------------ */
 
   async getTransactions(): Promise<Transaction[]> {
