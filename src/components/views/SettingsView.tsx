@@ -26,6 +26,7 @@ import { usePwa } from "@/lib/pwa/PwaProvider";
 import { financeStore } from "@/lib/storage/finance-store";
 import { isDebugEnabled, setDebugEnabled } from "@/lib/debug/logger";
 import { Sheet } from "@/components/ui/Sheet";
+import { AccountSection } from "@/components/settings/AccountSection";
 
 interface SettingsViewProps {
   onClearAllData: () => Promise<void>;
@@ -281,6 +282,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <span>{t("lockSessionBtn")}</span>
         </button>
       </section>
+
+      <AccountSection onShowToast={onShowToast} />
 
       {/* Datos */}
       <section className={card}>

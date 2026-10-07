@@ -16,7 +16,7 @@ import {
   X,
   Trash2,
 } from "lucide-react";
-import { Pocket } from "@/types/finance";
+import { Account, Pocket } from "@/types/finance";
 import { useApp } from "@/lib/context/AppContext";
 import { parseAmount } from "@/lib/finance/calc";
 
@@ -25,6 +25,9 @@ interface PocketsViewProps {
   onAddPocket: (p: Omit<Pocket, "id" | "created_at">) => Promise<void>;
   onDeletePocket: (id: string) => Promise<void>;
   onTransferToPocket: (pocketId: string, amount: number) => Promise<boolean>;
+  accounts?: Account[];
+  /** Paga/retira desde el bolsillo hacia una cuenta (p. ej. la tarjeta). */
+  onPayFromPocket?: (pocketId: string, accountId: string, amount: number) => Promise<boolean>;
   onShowToast: (msg: string) => void;
 }
 
@@ -33,6 +36,8 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
   onAddPocket,
   onDeletePocket,
   onTransferToPocket,
+  accounts = [],
+  onPayFromPocket,
   onShowToast,
 }) => {
   const { t, formatMoney } = useApp();
@@ -40,6 +45,37 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [selectedPocketForTransfer, setSelectedPocketForTransfer] = useState<Pocket | null>(null);
   const [transferAmount, setTransferAmount] = useState("");
+  const [payPocket, setPayPocket] = useState<Pocket | null>(null);
+  const [payAccountId, setPayAccountId] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const [payError, setPayError] = useState<string | null>(null);
+
+  // Tarjetas primero: es el uso principal (pagar la tarjeta con el bolsillo de gastos)
+  const payTargets = [...accounts].sort((a, b) => Number(b.type === "credit") - Number(a.type === "credit"));
+
+  const openPay = (pkt: Pocket) => {
+    const firstCard = payTargets.find((a) => a.type === "credit");
+    const target = firstCard || payTargets[0];
+    setPayPocket(pkt);
+    setPayAccountId(target?.id || "");
+    // Sugiere pagar la deuda de la tarjeta, sin pasarse de lo que tiene el bolsillo
+    const debt = firstCard && Number(firstCard.balance) < 0 ? Math.abs(Number(firstCard.balance)) : 0;
+    setPayAmount(debt > 0 ? String(Math.min(debt, Number(pkt.current_amount || 0))) : "");
+    setPayError(null);
+  };
+
+  const handlePay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payPocket || !onPayFromPocket) return;
+    const n = parseAmount(payAmount);
+    if (!(n > 0)) return setPayError("Ingresa un monto válido");
+    if (n > Number(payPocket.current_amount || 0)) return setPayError("El bolsillo no tiene ese saldo");
+    if (!payAccountId) return setPayError("Elige la cuenta o tarjeta destino");
+    const ok = await onPayFromPocket(payPocket.id, payAccountId, n);
+    if (!ok) return setPayError("No se pudo registrar el pago");
+    onShowToast(`Pago de ${formatMoney(n)} desde "${payPocket.name}"`);
+    setPayPocket(null);
+  };
 
   // New Pocket Form State
   const [name, setName] = useState("");
@@ -260,6 +296,15 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                   <ArrowUpRight className="w-3.5 h-3.5 text-sky2" />
                   <span>Aportar Fondos</span>
                 </button>
+                {onPayFromPocket && accounts.length > 0 && Number(pkt.current_amount || 0) > 0 && (
+                  <button
+                    onClick={() => openPay(pkt)}
+                    className="w-full py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-semibold text-white border border-white/[0.06] flex items-center justify-center gap-1.5 transition-colors active:scale-98"
+                  >
+                    <Wallet className="w-3.5 h-3.5 text-sky2" />
+                    <span>Pagar con este bolsillo</span>
+                  </button>
+                )}
               </div>
             );
           })}
@@ -402,6 +447,65 @@ export const PocketsView: React.FC<PocketsViewProps> = ({
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#03b5d3] to-[#4cd7f6] text-xs font-bold text-black shadow-md active:scale-95 transition-all"
                 >
                   Confirmar Aporte
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Pay from pocket */}
+      {payPocket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm ">
+          <div className="w-full max-w-sm rounded-2xl bg-card border border-white/[0.1] p-5 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white">Pagar con: {payPocket.name}</h3>
+              <button onClick={() => setPayPocket(null)} className="text-slate-400 hover:text-white p-1" aria-label="Cerrar">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Disponible en el bolsillo: {formatMoney(Number(payPocket.current_amount || 0))}. Es un traslado: no cuenta como gasto del mes.
+            </p>
+            <form onSubmit={handlePay} className="flex flex-col gap-3.5">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Pagar a</label>
+                <select
+                  value={payAccountId}
+                  onChange={(e) => setPayAccountId(e.target.value)}
+                  className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-sm text-white focus:outline-none"
+                >
+                  {payTargets.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.type === "credit" ? "💳 " : ""}
+                      {a.name}
+                      {a.type === "credit" && Number(a.balance) < 0 ? ` · deuda ${formatMoney(Math.abs(Number(a.balance)))}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Monto</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  required
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="w-full rounded-xl bg-inset border border-white/[0.08] px-3.5 py-2.5 text-base text-white placeholder-slate-500 focus:outline-none focus:border-[#4cd7f6]"
+                />
+              </div>
+              {payError && (
+                <p role="alert" className="text-[11px] text-rose-400">
+                  {payError}
+                </p>
+              )}
+              <div className="flex items-center gap-2 pt-2">
+                <button type="button" onClick={() => setPayPocket(null)} className="flex-1 py-2.5 rounded-xl bg-white/[0.04] text-xs font-semibold text-slate-300 hover:text-white">
+                  Cancelar
+                </button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#03b5d3] to-[#4cd7f6] text-xs font-bold text-black shadow-md active:scale-95 transition-all">
+                  Confirmar pago
                 </button>
               </div>
             </form>
